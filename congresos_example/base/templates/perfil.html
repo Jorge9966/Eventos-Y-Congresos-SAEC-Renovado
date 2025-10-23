@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Perfil - SAC</title>
+  {% load static %}
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+  body { margin:0; display:flex; height:100vh; font-family:'Inter', Arial, Helvetica, sans-serif; background:#f3f6fb; overflow:hidden; }
+    .sidebar { width:260px; flex:0 0 260px; background:#fff; color:#0f172a; display:flex; flex-direction:column; padding:22px 20px; border-right:1px solid #e6ebf2; position:relative; transition: flex-basis .22s ease, width .22s ease, padding .22s ease, border-right .22s ease; }
+  .sidebar-top { display:flex; align-items:center; justify-content:space-between; padding:4px 2px 14px 2px; }
+  .sidebar-top .brand { font-size:1.15rem; font-weight:700; letter-spacing:.5px; color:#0b1730; }
+    .sidebar-divider { height:1px; background:#e9eef5; margin:0 -20px 14px; box-shadow:0 1px 0 rgba(15,23,42,0.03); }
+    .sidebar .section { margin-top:22px; font-size:0.78rem; color:#94a3b8; letter-spacing:.06em; text-transform:uppercase; }
+    .sidebar a { display:flex; align-items:center; gap:10px; padding:10px 10px; color:#334155; text-decoration:none; border-radius:10px; transition: background .12s ease, color .12s ease, box-shadow .12s ease; }
+    .sidebar a .bi{ font-size:1.05rem; color:#64748b; }
+    .sidebar a:hover { color:#0b5ed7; background:#eef5ff; box-shadow: inset 0 2px 8px rgba(37,99,235,0.12), 0 1px 6px rgba(37,99,235,0.08); }
+    .sidebar a:hover .bi{ color:#0b5ed7; }
+    .sidebar a.active{ background:#eaf2ff; color:#2563eb; font-weight:600; }
+    .sidebar a.active .bi{ color:#2563eb; }
+
+  .main { flex:1; background:#f8fafc; padding:0 40px 40px 40px; position:relative; height:100vh; overflow:auto; -webkit-overflow-scrolling: touch; }
+    .main::before { content:""; position:absolute; top:0; left:0; bottom:0; width:26px; background: linear-gradient(to right, rgba(15,23,42,0.10) 0%, rgba(15,23,42,0.06) 35%, rgba(15,23,42,0.00) 100%); pointer-events:none; }
+    body.sidebar-collapsed .main::before{ width:0; }
+    body.sidebar-collapsed .sidebar{ flex-basis:0; width:0; min-width:0; padding:0; border-right:none; overflow:hidden; }
+
+    .topbar { position: sticky; top: 0; z-index: 5; display:flex; align-items:center; justify-content:space-between; background:#ffffff; padding:8px 20px; border-bottom:1px solid #e6ebf2; min-height: 52px; margin-left: -40px; margin-right: -40px; width: calc(100% + 80px); box-shadow: 0 10px 18px -14px rgba(15,23,42,0.22); }
+    .topbar::after{ content:""; position:absolute; left:0; right:0; bottom:-12px; height:12px; background: linear-gradient(to bottom, rgba(15,23,42,0.08), rgba(15,23,42,0.00)); pointer-events:none; }
+    .topbar::before{ content:""; position:absolute; left:0; top:0; bottom:0; width:26px; background: linear-gradient(to right, rgba(15,23,42,0.10) 0%, rgba(15,23,42,0.06) 35%, rgba(15,23,42,0.00) 100%); pointer-events:none; }
+    .topbar-left{ display:flex; align-items:center; gap:16px; }
+    .icon-btn{ display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:999px; border:1px solid #e6ebf2; background:#fff; color:#64748b; cursor:pointer; box-shadow: 0 1px 2px rgba(16,24,40,.05); transition: background .12s ease, box-shadow .12s ease, color .12s ease; }
+    .icon-btn:hover{ background:#f7fafc; color:#0f172a; box-shadow: 0 2px 6px rgba(16,24,40,.08); }
+    .icon-btn svg{ width:18px; height:18px; }
+    .topbar-left .icon-btn{ margin-left:-10px; }
+    .icon-btn.user{ width:44px; height:44px; }
+    .icon-btn.user svg{ width:24px; height:24px; }
+
+  /* User dropdown menu */
+  .user-menu{ position:fixed; top:64px; right:24px; width:280px; background:#ffffff; border:1px solid #e6ebf2; border-radius:12px; box-shadow: 0 18px 44px rgba(15,23,42,0.18); display:none; z-index:50; overflow:hidden; }
+  .user-menu.open{ display:block; }
+  .user-menu .um-header{ display:flex; align-items:center; gap:12px; padding:12px 16px; font-weight:700; color:#0b1730; background:#f8fafc; border-bottom:1px solid #e6ebf2; }
+  .user-menu .um-header .avatar{ width:34px; height:34px; display:inline-flex; align-items:center; justify-content:center; border-radius:999px; border:1px solid #e6ebf2; color:#64748b; }
+  .user-menu .um-list a{ display:flex; align-items:center; gap:10px; padding:12px 16px; color:#334155; text-decoration:none; background:#fff; }
+  .user-menu .um-list a:hover{ background:#eef5ff; color:#0b5ed7; }
+  .user-menu .um-list a .bi{ color:#64748b; }
+
+    .hero-banner{ margin-left:-40px; margin-right:-40px; width:calc(100% + 80px); background: linear-gradient(90deg, #1d4ed8 0%, #3b82f6 50%, #5b21b6 100%); color:#fff; min-height:240px; display:flex; align-items:center; padding:32px 40px; }
+    .hero-title{ font-family:'Poppins', 'Inter', Arial, Helvetica, sans-serif; font-weight:300; font-size:2.2rem; margin:0; letter-spacing:.2px; }
+
+    .card-panel{ background:#f7f9fc; border:1px solid #e6ebf2; border-radius:12px; box-shadow: 0 10px 28px rgba(15,23,42,0.06); overflow:hidden; margin-top:24px; }
+    .card-header{ background:#f1f5f9; padding:14px 18px; color:#0b1730; font-weight:700; border-bottom:1px solid #e6ebf2; }
+    .card-body{ padding:18px; background:#ffffff; }
+
+    .form-label{ color:#334155; font-weight:500; }
+    .form-control{ border:1px solid #e2e8f0; border-radius:10px; padding:10px 12px; }
+    .btn-primary{ background:#1d4ed8; border:none; border-radius:10px; padding:10px 18px; }
+    .btn-primary:hover{ background:#1e40af; }
+
+  /* Estilo: botón de ojo como anexo azul a la derecha (tipo input-group) */
+  .input-append{ display:flex; align-items:stretch; }
+  .input-append .form-control{ border-top-right-radius:0; border-bottom-right-radius:0; border-right:0; }
+  .input-append .append-btn{ display:flex; align-items:center; justify-content:center; padding:0 16px; background:#0d6efd; color:#fff; border:1px solid #0d6efd; border-top-left-radius:0; border-bottom-left-radius:0; border-top-right-radius:10px; border-bottom-right-radius:10px; cursor:pointer; }
+  .input-append .append-btn:hover{ background:#0b5ed7; border-color:#0b5ed7; }
+  .toggle-visibility{ background:transparent; border:none; }
+  .help-text{ color:#64748b; font-size:0.9rem; margin-top:8px; }
+
+  /* footer sencillo al final del contenido */
+  .app-footer{ color:#94a3b8; font-size:0.98rem; margin-top:24px; padding:10px 0; }
+
+    .alert{ border-radius:10px; }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+  <div class="sidebar-top"><a class="brand" href="{% url 'inicio' %}">SAC</a></div>
+    <div class="sidebar-divider"></div>
+    <div class="section">
+      {% if rol == "Instructor" %} INSTRUCTOR {% elif rol == "Participante" %} PARTICIPANTE {% else %} ADMINISTRADOR {% endif %}
+    </div>
+    <a href="{% url 'inicio' %}"><i class="bi bi-house"></i> <span>Inicio</span></a>
+    <a href="{% url 'congresos' %}"><i class="bi bi-folder"></i> <span>Congresos</span></a>
+    <div class="section">CONFIGURACIÓN</div>
+    <a href="{% url 'correos' %}"><i class="bi bi-envelope"></i> <span>Correos</span></a>
+    <a href="{% url 'nivel_desempeno' %}"><i class="bi bi-collection"></i> <span>Nivel de desempeño</span></a>
+    <div class="section">PERFIL</div>
+    <a href="{% url 'perfil' %}" class="active"><i class="bi bi-person"></i> <span>Perfil</span></a>
+    <a href="{% url 'logout' %}"><i class="bi bi-box-arrow-right"></i> <span>Salir</span></a>
+    <div style="margin-top:auto; font-size:0.8rem; color:#aaa;">Logeado como: {{ request.user.username }}<br>Sistema de Administración de Congresos</div>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-left">
+        <button id="btnBurger" class="icon-btn" aria-label="Abrir menú" title="Menú">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <line x1="3" y1="12" x2="21" y2="12"/>
+            <line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <button id="btnUser" class="icon-btn user" aria-label="Usuario" title="Usuario">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+          <circle cx="12" cy="7" r="4"/>
+        </svg>
+      </button>
+    </div>
+    <div id="userMenu" class="user-menu" aria-hidden="true">
+      <div class="um-header">
+        <span class="avatar"><i class="bi bi-person"></i></span>
+        <span>{{ request.user.first_name|default:request.user.username }}</span>
+      </div>
+      <div class="um-list">
+        <a href="{% url 'perfil' %}"><i class="bi bi-gear"></i> <span>Modificar Perfil</span></a>
+        <a href="{% url 'logout' %}"><i class="bi bi-box-arrow-right"></i> <span>Salir</span></a>
+      </div>
+    </div>
+
+    <section class="hero-banner">
+      <h1 class="hero-title">Perfil</h1>
+    </section>
+
+    <div class="container-fluid" style="padding-left:0; padding-right:0;">
+      {% if messages %}
+        <div class="mt-3">
+          {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}" role="alert">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <!-- Card: Usuario -->
+      <div class="card-panel" id="user">
+        <div class="card-header">Usuario</div>
+        <div class="card-body">
+          {% if messages %}
+            {% for message in messages %}
+              {% if 'usuario' in message|lower or 'usuario' in message.tags %}
+                <div class="alert alert-{{ message.tags }}" role="alert">{{ message }}</div>
+              {% endif %}
+            {% endfor %}
+          {% endif %}
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="update_name" />
+            <div class="mb-3">
+              <label class="form-label" for="username">Usuario</label>
+              <input class="form-control" id="username" name="username" type="text" value="{{ username_value|default:request.user.username }}" required />
+            </div>
+            <button class="btn btn-primary" type="submit">Actualizar</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Card: Cambiar contraseña -->
+      <div class="card-panel" id="password">
+        <div class="card-header">Cambiar contraseña</div>
+        <div class="card-body">
+          {% if messages %}
+            {% for message in messages %}
+              {% if 'contraseña' in message|lower or 'password' in message|lower %}
+                <div class="alert alert-{{ message.tags }}" role="alert">{{ message }}</div>
+              {% endif %}
+            {% endfor %}
+          {% endif %}
+          <form method="post" id="passwordForm">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="update_password" />
+            <div class="mb-3">
+              <label class="form-label" for="current_password">Contraseña Actual</label>
+              <div class="input-append">
+                <input class="form-control" id="current_password" name="current_password" type="password" required />
+                <button class="append-btn toggle-visibility" type="button" data-target="#current_password" title="Mostrar/Ocultar">
+                  <i class="bi bi-eye-slash"></i>
+                </button>
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="new_password">Nueva Contraseña</label>
+              <input class="form-control" id="new_password" name="new_password" type="password" required />
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="confirm_password">Confirmar Nueva Contraseña</label>
+              <input class="form-control" id="confirm_password" name="confirm_password" type="password" required />
+            </div>
+            <button class="btn btn-primary" type="submit">Actualizar</button>
+          </form>
+        </div>
+      </div>
+      <div class="app-footer">Sistema de Administración de Congresos</div>
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      var btn = document.getElementById('btnBurger');
+      if(btn){ btn.addEventListener('click', function(){ document.body.classList.toggle('sidebar-collapsed'); }); }
+
+      // Toggle visibility for password fields
+      document.querySelectorAll('.toggle-visibility').forEach(function(el){
+        el.addEventListener('click', function(){
+          var input = document.querySelector(el.getAttribute('data-target'));
+          if(!input) return;
+          if(input.type === 'password'){
+            input.type = 'text'; el.innerHTML = '<i class="bi bi-eye"></i>';
+          } else {
+            input.type = 'password'; el.innerHTML = '<i class="bi bi-eye-slash"></i>';
+          }
+        });
+      });
+
+      // User menu toggle
+      var userBtn = document.getElementById('btnUser');
+      var userMenu = document.getElementById('userMenu');
+      function closeUserMenu(){ if(userMenu) userMenu.classList.remove('open'); }
+      if(userBtn && userMenu){
+        userBtn.addEventListener('click', function(e){ e.stopPropagation(); userMenu.classList.toggle('open'); });
+        document.addEventListener('click', function(){ closeUserMenu(); });
+        document.addEventListener('keydown', function(ev){ if(ev.key === 'Escape') closeUserMenu(); });
+        userMenu.addEventListener('click', function(e){ e.stopPropagation(); });
+      }
+    })();
+  </script>
+</body>
+</html>
