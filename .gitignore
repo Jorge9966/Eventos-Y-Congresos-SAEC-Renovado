@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.coverage
+coverage.xml
+
+# Django
+db.sqlite3
+/congresos_example/db.sqlite3
+/staticfiles/
+media/
+/congresos_example/media/
+*.log
+
+# Environments
+.venv/
+venv/
+env/
+
+# IDE / OS
+.vscode/
+.DS_Store

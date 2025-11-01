@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -123,6 +124,10 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# Media (uploads)
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
@@ -131,6 +136,26 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # ... todas tus configuraciones anteriores ...
 
 # Configuración de login/logout
-LOGIN_URL = '/login/'                # A dónde te manda si no estás logueado
+LOGIN_URL = '/'                      # En no autenticado, envía primero a la portada (home)
 LOGIN_REDIRECT_URL = '/inicio/'      # A dónde te manda después de iniciar sesión
-LOGOUT_REDIRECT_URL = '/login/'      # A dónde te manda después de cerrar sesión
+LOGOUT_REDIRECT_URL = '/'            # Tras cerrar sesión, vuelve a la portada
+
+# Cerrar sesión automáticamente al cerrar el navegador
+# (la cookie de sesión no se persiste entre cierres completos del navegador)
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+
+# -----------------------------
+# Email: configurable por variables de entorno
+# - Por defecto usa 'console' para que no falle en desarrollo
+# - Para envío real, define EMAIL_BACKEND=smtp y completa los demás valores
+# -----------------------------
+EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+
+# Valores comunes para SMTP (se usan si configuras EMAIL_BACKEND smtp)
+EMAIL_HOST = os.environ.get('EMAIL_HOST', '')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True').lower() == 'true'
+EMAIL_USE_SSL = os.environ.get('EMAIL_USE_SSL', 'False').lower() == 'true'
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER or 'no-reply@localhost')

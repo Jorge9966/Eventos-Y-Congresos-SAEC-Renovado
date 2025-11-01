@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Acceder - Eventos y Congresos</title>
+  <title>Acceder - Congresos o eventos</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
   <style>
@@ -14,9 +14,13 @@
     .login-card{ width:360px; }
     .login-card h2{ color:#fff; font-weight:700; }
     .form-control{ border-radius:8px; }
-    .btn-primary{ background:#0d6efd; border-color:#0d6efd; }
+  .btn-primary{ background:#0d6efd; border-color:#0d6efd; transition:box-shadow .2s, background-color .2s, border-color .2s, transform .2s; }
+  .btn-primary:hover{ background:#1677ff; border-color:#1677ff; box-shadow:0 0 12px rgba(13,110,253,.6); transform:translateY(-1px); }
+  .btn-light{ transition:box-shadow .2s, transform .2s; }
+  .btn-light:hover{ box-shadow:0 0 12px rgba(13,110,253,.45); transform:translateY(-1px); }
     .tabs { display:flex; gap:24px; margin-bottom:18px; }
-    .tabs a{ color:rgba(255,255,255,0.7); text-decoration:none; padding-bottom:6px; border-bottom:2px solid transparent; }
+  .tabs a{ color:rgba(255,255,255,0.7); text-decoration:none; padding-bottom:6px; border-bottom:2px solid transparent; transition:color .2s, text-shadow .2s, border-color .2s; }
+  .tabs a:hover{ color:#fff; text-shadow:0 0 10px rgba(255,255,255,.6); border-bottom-color:rgba(255,255,255,.45); }
     .tabs a.active{ color:#fff; border-bottom-color:rgba(255,255,255,0.2); }
     .small-muted{ color:rgba(255,255,255,0.6); }
     .logo-img{ max-width:360px; }
@@ -29,28 +33,35 @@
 </head>
 <body>
   <div class="left-side">
-    <img src="/static/images/logo_isc.png" alt="ISC" class="logo-img">
+    {% if selected_congreso and selected_congreso.logo %}
+      <img src="{{ selected_congreso.logo.url }}" alt="{{ selected_congreso.name }}" class="logo-img">
+    {% else %}
+      <img src="/static/images/logo_isc.png" alt="ISC" class="logo-img">
+    {% endif %}
   </div>
   <div class="right-side">
     <div class="login-card">
-      <h2>Sistema de Administración de Eventos y Congresos</h2>
+  <h2>Sistema de Administración de Congresos o eventos</h2>
 
       <div class="tabs mt-4">
-        <a class="active" href="{% url 'login' %}">Login</a>
-        <a href="{% url 'register' %}">Registrarme</a>
-        <a href="#">Olvidé contraseña</a>
+        <a class="active" href="{% url 'login' %}{% if selected_congreso %}?c={{ selected_congreso.id }}{% endif %}">Login</a>
+        <a href="{% url 'register' %}{% if selected_congreso %}?c={{ selected_congreso.id }}{% endif %}">Registrarme</a>
+        <a href="{% url 'password_reset' %}{% if selected_congreso %}?c={{ selected_congreso.id }}{% endif %}">Recuperar contraseña</a>
       </div>
 
       {% if messages %}
         {% for m in messages %}
-          <div class="alert alert-{{ m.tags }}">{{ m }}</div>
+          <div class="alert {% if 'error' in m.tags %}alert-danger{% else %}alert-{{ m.tags }}{% endif %}">{{ m }}</div>
         {% endfor %}
       {% endif %}
 
       <form method="post" action="">
         {% csrf_token %}
+        {% if selected_congreso %}
+          <input type="hidden" name="c" value="{{ selected_congreso.id }}" />
+        {% endif %}
         <div class="mb-3">
-          <input name="username" type="text" class="form-control" placeholder="Correo Institucional" required>
+          <input name="username" type="text" class="form-control" placeholder="Correo" required>
         </div>
         <div class="mb-3 position-relative">
           <input id="login_password" name="password" type="password" class="form-control" placeholder="Contraseña" required>

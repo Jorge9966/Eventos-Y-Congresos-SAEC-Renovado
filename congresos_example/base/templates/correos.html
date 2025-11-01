@@ -2,16 +2,16 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <title>Correos - SAC</title>
+  <title>Correos - SAEC</title>
   {% load static %}
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
   <style>
-  body { margin:0; display:flex; height:100vh; font-family:'Inter', Arial, Helvetica, sans-serif; background:#f3f6fb; overflow:hidden; }
+  body { margin:0; display:flex; min-height:100vh; font-family:'Inter', Arial, Helvetica, sans-serif; background:#d9e0ea; }
     /* Sidebar */
-    .sidebar { width:260px; flex:0 0 260px; background:#fff; color:#0f172a; display:flex; flex-direction:column; padding:22px 20px; border-right:1px solid #e6ebf2; position:relative; transition: flex-basis .22s ease, width .22s ease, padding .22s ease, border-right .22s ease; }
+  .sidebar { width:260px; flex:0 0 260px; background:#fff; color:#0f172a; display:flex; flex-direction:column; padding:22px 20px; border-right:1px solid #e6ebf2; position:sticky; top:0; height:100vh; overflow-y:auto; transition: flex-basis .22s ease, width .22s ease, padding .22s ease, border-right .22s ease; }
   .sidebar-top { display:flex; align-items:center; justify-content:space-between; padding:4px 2px 14px 2px; }
   .sidebar-top .brand { font-size:1.15rem; font-weight:700; letter-spacing:.5px; color:#0b1730; }
     .sidebar-divider { height:1px; background:#e9eef5; margin:0 -20px 14px; box-shadow:0 1px 0 rgba(15,23,42,0.03); }
@@ -24,7 +24,7 @@
     .sidebar a.active .bi{ color:#2563eb; }
 
     /* Main */
-  .main { flex:1; background:#f8fafc; padding:0 40px 40px 40px; position:relative; height:100vh; overflow:auto; -webkit-overflow-scrolling: touch; }
+  .main { flex:1; background:#e3e7f1; padding:0 40px 40px 40px; position:relative; min-height:100vh; -webkit-overflow-scrolling: touch; }
     .main::before { content:""; position:absolute; top:0; left:0; bottom:0; width:26px; background: linear-gradient(to right, rgba(15,23,42,0.10) 0%, rgba(15,23,42,0.06) 35%, rgba(15,23,42,0.00) 100%); pointer-events:none; }
     body.sidebar-collapsed .main::before{ width:0; }
     body.sidebar-collapsed .sidebar{ flex-basis:0; width:0; min-width:0; padding:0; border-right:none; overflow:hidden; }
@@ -84,20 +84,20 @@
 </head>
 <body>
   <div class="sidebar">
-  <div class="sidebar-top"><a class="brand" href="{% url 'inicio' %}">SAC</a></div>
+  <div class="sidebar-top"><a class="brand" href="{% url 'inicio' %}">SAEC</a></div>
     <div class="sidebar-divider"></div>
     <div class="section">
       {% if rol == "Instructor" %} INSTRUCTOR {% elif rol == "Participante" %} PARTICIPANTE {% else %} ADMINISTRADOR {% endif %}
     </div>
     <a href="{% url 'inicio' %}"><i class="bi bi-house"></i> <span>Inicio</span></a>
-    <a href="{% url 'congresos' %}"><i class="bi bi-folder"></i> <span>Congresos</span></a>
+  <a href="{% url 'congresos_eventos' %}"><i class="bi bi-folder"></i> <span>Congresos o eventos</span></a>
     <div class="section">CONFIGURACIÓN</div>
     <a href="{% url 'correos' %}" class="active"><i class="bi bi-envelope"></i> <span>Correos</span></a>
   <a href="{% url 'nivel_desempeno' %}"><i class="bi bi-collection"></i> <span>Nivel de desempeño</span></a>
   <div class="section">PERFIL</div>
   <a href="{% url 'perfil' %}"><i class="bi bi-person"></i> <span>Perfil</span></a>
     <a href="{% url 'logout' %}"><i class="bi bi-box-arrow-right"></i> <span>Salir</span></a>
-    <div style="margin-top:auto; font-size:0.8rem; color:#aaa;">Logeado como: {{ request.user.username }}<br>Sistema de Administración de Congresos</div>
+  <div style="margin-top:auto; font-size:0.8rem; color:#aaa;">Logeado como: {{ request.user.username }}<br>Sistema de Administración de Congresos o eventos</div>
   </div>
 
   <div class="main">
@@ -131,60 +131,130 @@
 
     <section class="hero-banner">
       <div class="hero-content">
-        <h1 class="hero-title">Correos</h1>
-        <div class="hero-subtitle">En esta sección usted podrá agregar los correos que serán aceptados al momento de que se registren los alumnos e instructores</div>
+        <h1 class="hero-title">Correos permitidos por congreso</h1>
+        <div class="hero-subtitle">Define los dominios de correo aceptados por cada congreso o evento. Ejemplo: @gmail.com, @hotmail.com, @itsva.edu.mx.</div>
       </div>
     </section>
 
+    {% if messages %}
+      <div class="mt-3">
+        {% for message in messages %}
+          <div class="alert {% if 'error' in message.tags %}alert-danger{% elif 'warning' in message.tags %}alert-warning{% else %}alert-success{% endif %}" role="alert">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
     <div class="table-wrapper">
       <div class="table-card">
-  <div class="card-header"><span class="es-blue">Mostrando los correos permitidos</span></div>
+        <div class="card-header">
+          <span class="es-blue">Listado de dominios</span>
+        </div>
         <div class="card-body">
           <div class="table-controls">
             <div class="controls-left">
-              <label for="entriesSelect">Show</label>
-              <select id="entriesSelect">
-                <option value="10" selected>10</option>
-                <option value="25">25</option>
-                <option value="50">50</option>
-                <option value="100">100</option>
-              </select>
-              <span>entries</span>
+              <form method="get" id="congresoForm" style="display:flex; align-items:center; gap:10px;">
+                <label for="congresoSelect">Congreso:</label>
+                <select id="congresoSelect" name="c" onchange="document.getElementById('congresoForm').submit()">
+                  {% for cg in congresos %}
+                    <option value="{{ cg.id }}" {% if congreso.id == cg.id %}selected{% endif %}>{{ cg.name }}</option>
+                  {% endfor %}
+                </select>
+              </form>
+              <div style="display:flex; align-items:center; gap:10px; margin-left:16px;">
+                <label for="entriesSelect">Mostrar</label>
+                <select id="entriesSelect">
+                  <option value="10" selected>10</option>
+                  <option value="25">25</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                </select>
+                <span>registros</span>
+              </div>
             </div>
             <div class="controls-right">
-              <label for="tableSearch">Search:</label>
+              <label for="tableSearch">Buscar:</label>
               <input id="tableSearch" type="text" placeholder="Buscar..." />
             </div>
           </div>
+
           <table class="data" id="correosTable">
             <thead>
               <tr>
                 <th style="width:80px;"><span class="es-blue">Id</span></th>
-                <th><span class="es-blue">Correo</span></th>
+                <th><span class="es-blue">Dominio</span></th>
                 <th class="col-actions"><span class="es-blue">Acción</span></th>
               </tr>
             </thead>
             <tbody>
-              {% if correos %}
-                {% for item in correos %}
-                <tr>
-                  <td>{{ item.id }}</td>
-                  <td>{{ item.email }}</td>
-                  <td>
-                    <button class="action-btn" title="Editar"><i class="bi bi-pencil"></i></button>
-                    <button class="action-btn" title="Eliminar"><i class="bi bi-trash"></i></button>
-                  </td>
-                </tr>
+              {% if dominios %}
+                {% for d in dominios %}
+                  <tr>
+                    <td>{{ d.id }}</td>
+                    <td>{{ d.domain }}</td>
+                    <td>
+                      <a class="action-btn" title="Editar" href="{% url 'correos' %}?c={{ congreso.id }}&edit={{ d.id }}"><i class="bi bi-pencil"></i></a>
+                      <form method="post" style="display:inline-block" onsubmit="return confirm('¿Eliminar dominio?');">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="delete_domain" />
+                        <input type="hidden" name="congreso_id" value="{{ congreso.id }}" />
+                        <input type="hidden" name="domain_id" value="{{ d.id }}" />
+                        <button class="action-btn" title="Eliminar"><i class="bi bi-trash"></i></button>
+                      </form>
+                    </td>
+                  </tr>
                 {% endfor %}
               {% else %}
                 <tr>
-                  <td colspan="3" style="text-align:center; color:#64748b; padding:26px;">No hay datos para mostrar.</td>
+                  <td colspan="3" style="text-align:center; color:#64748b; padding:26px;">No hay dominios registrados para este congreso.</td>
                 </tr>
               {% endif %}
             </tbody>
           </table>
         </div>
       </div>
+
+      <div class="table-card" style="margin-top:20px;">
+        <div class="card-header">
+          {% if edit_domain %}
+            <span class="es-blue">Actualizar dominio</span>
+          {% else %}
+            <span class="es-blue">Agregar un nuevo dominio</span>
+          {% endif %}
+        </div>
+        <div class="card-body" style="padding:16px; background:#fff;">
+          {% if edit_domain %}
+          <form method="post" class="row g-3">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="update_domain" />
+            <input type="hidden" name="congreso_id" value="{{ congreso.id }}" />
+            <input type="hidden" name="domain_id" value="{{ edit_domain.id }}" />
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="domainInput">Dominio</label>
+              <input id="domainInput" name="domain" type="text" class="form-control" value="{{ edit_domain.domain }}" required>
+            </div>
+            <div class="col-12 col-md-4 align-self-end" style="display:flex; gap:8px;">
+              <button class="btn btn-primary" type="submit">Actualizar</button>
+              <a class="btn btn-light" href="{% url 'correos' %}?c={{ congreso.id }}">Cancelar</a>
+            </div>
+          </form>
+          {% else %}
+          <form method="post" class="row g-3">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="add_domain" />
+            <input type="hidden" name="congreso_id" value="{{ congreso.id }}" />
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="domainInput">Dominio</label>
+              <input id="domainInput" name="domain" type="text" class="form-control" placeholder="Ejemplo: @itsva.edu.mx" required>
+            </div>
+            <div class="col-12 col-md-3 align-self-end">
+              <button class="btn btn-primary" type="submit">Guardar</button>
+            </div>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+
+      
     </div>
   </div>
 
@@ -206,13 +276,13 @@
 
     // Búsqueda y límite simple en cliente
     var search = document.getElementById('tableSearch');
-    var select = document.getElementById('entriesSelect');
+  var select = document.getElementById('entriesSelect');
     var table = document.getElementById('correosTable');
     var STORAGE_KEY = 'correos_rows_per_page';
       function updateTableView(){
         var term = (search && search.value || '').toLowerCase();
-        var limit = parseInt((select && select.value) || '10', 10);
         var rows = Array.from(table.querySelectorAll('tbody tr'));
+        var limit = select ? parseInt(select.value || '10', 10) : rows.length;
         var shown = 0;
         rows.forEach(function(tr){
           // si es fila de "no datos", siempre mostrar solo cuando no hay resultados
@@ -228,12 +298,11 @@
       }
       if(search){ search.addEventListener('input', updateTableView); }
       if(select){
-        // Restaurar selección persistida o default 10
+        // Persistir preferencia en localStorage
+        var STORAGE_KEY = 'correos_rows_per_page';
         var saved = localStorage.getItem(STORAGE_KEY);
         if(saved && ['10','25','50','100'].includes(saved)){
           select.value = saved;
-        } else {
-          select.value = '10';
         }
         select.addEventListener('change', function(){
           localStorage.setItem(STORAGE_KEY, select.value);
