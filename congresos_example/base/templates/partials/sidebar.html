@@ -1,0 +1,37 @@
+{% load static %}
+<div class="sidebar">
+  <div class="sidebar-top" style="padding:4px 2px 4px 2px; margin:-14px 0 0 -12px;">
+    <a class="brand" href="{% url 'inicio' %}">
+      <img src="{% static 'base/img/SAEC.png' %}" alt="SAEC" style="height:64px; width:auto; display:block;" />
+    </a>
+  </div>
+  <div class="sidebar-divider" style="margin:0 -20px 2px;"></div>
+  <div class="section" style="margin-top:4px;">
+    {% if rol == "Instructor" %}
+      INSTRUCTOR
+    {% elif rol == "Participante" %}
+      PARTICIPANTE
+    {% else %}
+      ADMINISTRADOR
+    {% endif %}
+  </div>
+  {% with current=request.resolver_match.url_name|default:'' %}
+    <a href="{% url 'inicio' %}" class="{% if current == 'inicio' %}active{% endif %}"><i class="bi bi-house"></i> <span>Inicio</span></a>
+    {% if not is_scoped_admin %}
+      <a href="{% url 'congresos_eventos' %}" class="{% if current == 'congresos_eventos' or current == 'congreso_evento' or current == 'editar_congreso_evento' %}active{% endif %}">
+        <i class="bi bi-folder"></i> <span>Congresos o eventos</span>
+      </a>
+      <div class="section">CONFIGURACIÓN</div>
+      <a href="{% url 'correos' %}" class="{% if current == 'correos' %}active{% endif %}"><i class="bi bi-envelope"></i> <span>Correos</span></a>
+      <a href="{% url 'nivel_desempeno' %}" class="{% if current == 'nivel_desempeno' %}active{% endif %}"><i class="bi bi-collection"></i> <span>Nivel de desempeño</span></a>
+      <a href="{% url 'campos' %}" class="{% if current == 'campos' %}active{% endif %}"><i class="bi bi-ui-checks"></i> <span>Campos</span></a>
+    {% endif %}
+    <div class="section">PERFIL</div>
+    <a href="{% url 'perfil' %}" class="{% if current == 'perfil' %}active{% endif %}"><i class="bi bi-person"></i> <span>Perfil</span></a>
+    <a href="{% url 'logout' %}"><i class="bi bi-box-arrow-right"></i> <span>Salir</span></a>
+  {% endwith %}
+  <div style="margin-top:auto; font-size:0.8rem; color:#aaa;">
+    Logeado como: {{ request.user.username }}<br>
+    Sistema de Administración de Congresos o eventos
+  </div>
+</div>

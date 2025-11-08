@@ -20,8 +20,25 @@
     .sidebar a:hover { color:#0b5ed7; background:#eef5ff; box-shadow: inset 0 2px 8px rgba(37,99,235,0.12), 0 1px 6px rgba(37,99,235,0.08); }
     .sidebar a.active{ background:#eaf2ff; color:#2563eb; font-weight:600; }
 
-    .main { flex:1; background:#e3e7f1; padding:0 40px 40px 40px; position:relative; min-height:100vh; }
-    .topbar { position: sticky; top: 0; z-index: 5; display:flex; align-items:center; justify-content:space-between; background:#ffffff; padding:8px 20px; border-bottom:1px solid #e6ebf2; min-height: 52px; margin-left: -40px; margin-right: -40px; width: calc(100% + 80px); box-shadow: 0 10px 18px -14px rgba(15,23,42,0.22); }
+  .main { flex:1; background:#e3e7f1; padding:0 40px 40px 40px; position:relative; min-height:100vh; }
+  .topbar { position: sticky; top: 0; z-index: 5; display:flex; align-items:center; justify-content:space-between; background:#ffffff; padding:8px 20px; border-bottom:1px solid #e6ebf2; min-height: 52px; margin-left: -40px; margin-right: -40px; width: calc(100% + 80px); box-shadow: 0 10px 18px -14px rgba(15,23,42,0.22); }
+  .topbar::after{ content:""; position:absolute; left:0; right:0; bottom:-12px; height:12px; background: linear-gradient(to bottom, rgba(15,23,42,0.08), rgba(15,23,42,0.00)); pointer-events:none; }
+  .topbar::before{ content:""; position:absolute; left:0; top:0; bottom:0; width:26px; background: linear-gradient(to right, rgba(15,23,42,0.10) 0%, rgba(15,23,42,0.06) 35%, rgba(15,23,42,0.00) 100%); pointer-events:none; }
+  .topbar-left{ display:flex; align-items:center; gap:16px; }
+  .icon-btn{ display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:999px; border:1px solid #e6ebf2; background:#fff; color:#64748b; cursor:pointer; box-shadow: 0 1px 2px rgba(16,24,40,.05); transition: background .12s ease, box-shadow .12s ease, color .12s ease; }
+  .icon-btn:hover{ background:#f7fafc; color:#0f172a; box-shadow: 0 2px 6px rgba(16,24,40,.08); }
+  .topbar-left .icon-btn{ margin-left:-10px; }
+  .icon-btn.user{ width:44px; height:44px; }
+  .icon-btn.user svg{ width:24px; height:24px; }
+
+  /* User dropdown menu */
+  .user-menu{ position:fixed; top:64px; right:24px; width:280px; background:#ffffff; border:1px solid #e6ebf2; border-radius:12px; box-shadow: 0 18px 44px rgba(15,23,42,0.18); display:none; z-index:50; overflow:hidden; }
+  .user-menu.open{ display:block; }
+  .user-menu .um-header{ display:flex; align-items:center; gap:12px; padding:12px 16px; font-weight:700; color:#0b1730; background:#f8fafc; border-bottom:1px solid #e6ebf2; }
+  .user-menu .um-header .avatar{ width:34px; height:34px; display:inline-flex; align-items:center; justify-content:center; border-radius:999px; border:1px solid #e6ebf2; color:#64748b; }
+  .user-menu .um-list a{ display:flex; align-items:center; gap:10px; padding:12px 16px; color:#334155; text-decoration:none; background:#fff; }
+  .user-menu .um-list a:hover{ background:#eef5ff; color:#0b5ed7; }
+  .user-menu .um-list a .bi{ color:#64748b; }
 
     .hero-banner{ margin-left:-40px; margin-right:-40px; width:calc(100% + 80px); background: linear-gradient(90deg, #1d4ed8 0%, #3b82f6 50%, #5b21b6 100%); color:#fff; min-height:200px; display:flex; align-items:center; padding:24px 40px; }
     .hero-title{ font-family:'Poppins', 'Inter', Arial, Helvetica, sans-serif; font-weight:300; font-size:2rem; margin:0; letter-spacing:.2px; }
@@ -36,26 +53,20 @@
     .input-append .append-btn{ display:flex; align-items:center; justify-content:center; padding:0 16px; background:#0d6efd; color:#fff; border:1px solid #0d6efd; border-top-left-radius:0; border-bottom-left-radius:0; border-top-right-radius:8px; border-bottom-right-radius:8px; cursor:pointer; }
     .input-append .append-btn:hover{ background:#0b5ed7; border-color:#0b5ed7; }
     .toggle-visibility{ background:transparent; border:none; }
+
+    /* Unificación del botón burger y colapso del sidebar */
+    .icon-btn svg{ width:18px; height:18px; }
+    .main::before{ content:""; position:absolute; top:0; left:0; bottom:0; width:26px; background: linear-gradient(to right, rgba(15,23,42,0.10) 0%, rgba(15,23,42,0.06) 35%, rgba(15,23,42,0.00) 100%); pointer-events:none; }
+    body.sidebar-collapsed .main::before{ width:0; }
+    .sidebar{ transition: flex-basis .22s ease, width .22s ease, padding .22s ease, border-right .22s ease; }
+    body.sidebar-collapsed .sidebar{ flex-basis:0; width:0; min-width:0; padding:0; border-right:none; overflow:hidden; }
   </style>
 </head>
 <body>
-  <div class="sidebar">
-    <div class="sidebar-top"><a class="brand" href="{% url 'inicio' %}">SAEC</a></div>
-    <div class="sidebar-divider"></div>
-    <div class="section">{% if rol == 'Instructor' %} INSTRUCTOR {% elif rol == 'Participante' %} PARTICIPANTE {% else %} ADMINISTRADOR {% endif %}</div>
-    <a href="{% url 'inicio' %}"><i class="bi bi-house"></i> <span>Inicio</span></a>
-    <a href="{% url 'congresos_eventos' %}" class="active"><i class="bi bi-folder"></i> <span>Congresos o eventos</span></a>
-    <div class="section">CONFIGURACIÓN</div>
-    <a href="{% url 'correos' %}"><i class="bi bi-envelope"></i> <span>Correos</span></a>
-    <a href="{% url 'nivel_desempeno' %}"><i class="bi bi-collection"></i> <span>Nivel de desempeño</span></a>
-    <div class="section">PERFIL</div>
-    <a href="{% url 'perfil' %}"><i class="bi bi-person"></i> <span>Perfil</span></a>
-    <a href="{% url 'logout' %}"><i class="bi bi-box-arrow-right"></i> <span>Salir</span></a>
-    <div style="margin-top:auto; font-size:0.8rem; color:#aaa;">Logeado como: {{ request.user.username }}<br>Sistema de Administración de Congresos o eventos</div>
-  </div>
+  {% include 'partials/sidebar.html' %}
 
   <div class="main">
-    <div class="topbar"></div>
+    {% include 'partials/topbar.html' %}
 
     <section class="hero-banner">
       <h1 class="hero-title">Editar congreso o evento</h1>
@@ -119,12 +130,30 @@
           </div>
 
           <div class="col-12">
+            <label class="form-label" for="access_password">Contraseña de acceso del congreso</label>
+            <div class="input-append">
+              <input type="password" class="form-control" id="access_password" name="access_password" placeholder="(dejar vacío para no cambiar)" />
+              <button class="append-btn toggle-visibility" type="button" data-target="#access_password" title="Mostrar/Ocultar">
+                <i class="bi bi-eye-slash"></i>
+              </button>
+            </div>
+            <div class="form-hint mt-1">Puedes establecer una nueva contraseña de acceso para el registro de este congreso. Marca la casilla para eliminarla.</div>
+            <div class="form-check mt-2">
+              <input class="form-check-input" type="checkbox" value="on" id="clear_access_password" name="clear_access_password">
+              <label class="form-check-label" for="clear_access_password">
+                Eliminar contraseña de acceso
+              </label>
+            </div>
+          </div>
+
+          <div class="col-12">
             <button type="submit" class="btn btn-primary">Actualizar</button>
             <a href="{% url 'congresos_eventos' %}" class="btn btn-outline-secondary ms-2">Cancelar</a>
           </div>
         </form>
       </div>
     </div>
+    {% include 'partials/footer.html' %}
   </div>
 
   <script>
@@ -150,6 +179,21 @@
         ]
       });
     }
+    // Burger y menú de usuario
+    (function(){
+      var btn = document.getElementById('btnBurger');
+      if(btn){ btn.addEventListener('click', function(){ document.body.classList.toggle('sidebar-collapsed'); }); }
+      var userBtn = document.getElementById('btnUser');
+      var userMenu = document.getElementById('userMenu');
+      function closeUserMenu(){ if(userMenu) userMenu.classList.remove('open'); }
+      if(userBtn && userMenu){
+        userBtn.addEventListener('click', function(e){ e.stopPropagation(); userMenu.classList.toggle('open'); });
+        document.addEventListener('click', function(){ closeUserMenu(); });
+        document.addEventListener('keydown', function(ev){ if(ev.key === 'Escape') closeUserMenu(); });
+        userMenu.addEventListener('click', function(e){ e.stopPropagation(); });
+      }
+    })();
+
     // Toggle de visibilidad de contraseña
     document.querySelectorAll('.toggle-visibility').forEach(function(btn){
       btn.addEventListener('click', function(){

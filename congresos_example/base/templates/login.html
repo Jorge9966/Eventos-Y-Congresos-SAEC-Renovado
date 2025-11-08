@@ -51,7 +51,10 @@
 
       {% if messages %}
         {% for m in messages %}
-          <div class="alert {% if 'error' in m.tags %}alert-danger{% else %}alert-{{ m.tags }}{% endif %}">{{ m }}</div>
+          {# Oculta avisos de aprobaciones administrativas en la pantalla de login #}
+          {% if 'approval' not in m.tags %}
+            <div class="alert {% if 'error' in m.tags %}alert-danger{% else %}alert-{{ m.tags }}{% endif %}">{{ m }}</div>
+          {% endif %}
         {% endfor %}
       {% endif %}
 

@@ -1,0 +1,55 @@
+<div class="topbar">
+  <div class="topbar-left">
+    <button id="btnBurger" class="icon-btn" aria-label="Abrir menú" title="Menú">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="3" y1="6" x2="21" y2="6"/>
+        <line x1="3" y1="12" x2="21" y2="12"/>
+        <line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+    </button>
+  </div>
+  <button id="btnUser" class="icon-btn user" aria-label="Usuario" title="Usuario">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+      <circle cx="12" cy="7" r="4"/>
+    </svg>
+  </button>
+</div>
+<div id="userMenu" class="user-menu" aria-hidden="true">
+  <div class="um-header">
+    <span class="avatar"><i class="bi bi-person"></i></span>
+    <span>{{ request.user.first_name|default:request.user.username }}</span>
+  </div>
+  <div class="um-list">
+    <a href="{% url 'perfil_congreso' congreso.id %}"><i class="bi bi-gear"></i> <span>Modificar Perfil</span></a>
+    <a href="{% url 'logout' %}"><i class="bi bi-box-arrow-right"></i> <span>Salir</span></a>
+  </div>
+</div>
+<script>
+  (function(){
+    // Restaurar estado de colapso del sidebar
+    try{
+      var collapsed = localStorage.getItem('sidebarCollapsed') === '1';
+      if(collapsed){ document.body.classList.add('sidebar-collapsed'); }
+    }catch(e){}
+
+    var userBtn = document.getElementById('btnUser');
+    var userMenu = document.getElementById('userMenu');
+    function closeUserMenu(){ if(userMenu) userMenu.classList.remove('open'); }
+    if(userBtn && userMenu){
+      userBtn.addEventListener('click', function(e){ e.stopPropagation(); userMenu.classList.toggle('open'); });
+      document.addEventListener('click', function(){ closeUserMenu(); });
+      document.addEventListener('keydown', function(ev){ if(ev.key === 'Escape') closeUserMenu(); });
+      userMenu.addEventListener('click', function(e){ e.stopPropagation(); });
+    }
+
+    // Toggle del sidebar con el botón burger
+    var burger = document.getElementById('btnBurger');
+    if(burger){
+      burger.addEventListener('click', function(){
+        var isCollapsed = document.body.classList.toggle('sidebar-collapsed');
+        try{ localStorage.setItem('sidebarCollapsed', isCollapsed ? '1':'0'); }catch(e){}
+      });
+    }
+  })();
+</script>

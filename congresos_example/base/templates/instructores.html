@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Instructores - SAEC</title>
+  {% load static %}
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+  {% include '_congreso_base_styles.html' %}
+  <style>
+    /* Estilos tipo 'correos' para tarjeta de tabla y herramientas */
+    .table-wrapper{ margin-top:24px; }
+    .table-card{ background:#f7f9fc; border:1px solid #e6ebf2; border-radius:12px; box-shadow: 0 10px 28px rgba(15,23,42,0.06); overflow:hidden; }
+    .table-card .card-header{ background:#f1f5f9; padding:14px 18px; color:#0b1730; font-weight:700; border-bottom:1px solid #e6ebf2; }
+    .table-card .card-body{ padding:0; background:#f9fbfd; }
+    .table-controls{ display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 16px; border-bottom:1px solid #e6ebf2; background:#ffffff; }
+    .controls-left{ display:flex; align-items:center; gap:10px; color:#64748b; font-size:0.95rem; }
+    .controls-left select{ appearance:none; -webkit-appearance:none; -moz-appearance:none; padding:6px 10px; border:1px solid #e2e8f0; border-radius:8px; background:#fff; color:#0f172a; }
+    .controls-right{ display:flex; align-items:center; gap:10px; color:#64748b; font-size:0.95rem; }
+    .controls-right input{ padding:8px 10px; border:1px solid #e2e8f0; border-radius:8px; background:#fff; color:#0f172a; width:220px; }
+    table.data{ width:100%; border-collapse:separate; border-spacing:0; }
+    table.data th, table.data td{ padding:12px 14px; border-bottom:1px solid #eef2f5; color:#334155; }
+    table.data thead th{ background:#eef2f7; color:#0b1730; font-weight:700; }
+    table.data tbody tr:nth-child(even){ background:#f8fafc; }
+    table.data tbody tr:hover{ background:#eef4ff; }
+    table.data tbody tr:last-child td{ border-bottom:none; }
+    .col-actions{ width:130px; text-align:center; }
+    .action-btn{ background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:6px 10px; color:#334155; margin-right:6px; transition: background .12s ease, box-shadow .12s ease, color .12s ease; }
+    .action-btn:hover{ background:#f7fafc; box-shadow: 0 2px 6px rgba(16,24,40,.08); color:#0f172a; }
+    .es-blue{ color:#2563eb; }
+    .table-footer{ display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 16px; border-top:1px solid #e6ebf2; background:#ffffff; }
+  /* Sort indicators: show both arrows, highlight active */
+  .th-sortable{ cursor:pointer; user-select:none; }
+  .th-sortable .sort-icons{ display:inline-flex; flex-direction:column; margin-left:6px; line-height:0.8; vertical-align:middle; }
+  .th-sortable .arrow{ font-size:0.65rem; color:#94a3b8; }
+  thead th.sorted-asc .arrow.up{ color:#2563eb; }
+  thead th.sorted-desc .arrow.down{ color:#2563eb; }
+  </style>
+</head>
+<body>
+  {% include 'partials/congreso_sidebar.html' %}
+  <div class="main">
+    {% include 'partials/congreso_topbar.html' %}
+    <section class="hero-banner">
+      <div class="container-fluid px-0">
+        <h1 class="hero-title">Instructores</h1>
+        <p class="text-white-50 mb-2">Las modificaciones se guardan automáticamente.</p>
+        <div class="d-flex gap-2 mb-2 flex-wrap">
+          <a href="{% url 'usuario_instructor_nuevo' congreso.id %}" class="btn btn-success" title="Registrar nuevo instructor" aria-label="Registrar nuevo instructor">
+            <i class="bi bi-person-plus"></i>
+            <span class="visually-hidden">Registrar nuevo instructor</span>
+          </a>
+          <a href="#" class="btn btn-light" title="Descargar reporte" aria-label="Descargar reporte">
+            <i class="bi bi-download"></i>
+            <span class="visually-hidden">Descargar reporte</span>
+          </a>
+          {% if is_admin %}
+          <form method="post" class="d-inline" onsubmit="return confirm('{% if total_instructores_no_aprob|default:0 == 0 %}Ya todos están activados. ¿Deseas intentar de nuevo?{% else %}¿Activar a todos los instructores?{% endif %}');">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="activate_all" />
+            <button type="submit" class="btn {% if total_instructores_no_aprob|default:0 == 0 %}btn-success{% else %}btn-dark{% endif %}" title="{% if total_instructores_no_aprob|default:0 == 0 %}Ya todos están activados{% else %}Activar todos los instructores{% endif %}" aria-label="{% if total_instructores_no_aprob|default:0 == 0 %}Ya todos están activados{% else %}Activar todos los instructores{% endif %}">
+              <i class="bi bi-check2-all"></i>
+              <span class="visually-hidden">Activar todos los instructores</span>
+            </button>
+          </form>
+          {% endif %}
+        </div>
+        <div class="text-white-50">
+          Total de instructores Activados: {{ total_instructores_aprob|default:0 }}<br>
+          Total de instructores No Activados: {{ total_instructores_no_aprob|default:0 }}
+        </div>
+      </div>
+    </section>
+    {% if messages %}
+      <div class="container-fluid px-0 mt-3">
+        {% for message in messages %}
+          <div class="alert {% if 'error' in message.tags %}alert-danger{% elif 'warning' in message.tags %}alert-warning{% else %}alert-success{% endif %}" role="alert">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="container-fluid" style="padding-left:0; padding-right:0;">
+      <div class="table-wrapper">
+        <div class="table-card">
+          <div class="card-header">
+            <span class="es-blue">Lista de instructores</span>
+          </div>
+          <div class="card-body">
+            <div class="table-controls">
+              <div class="controls-left">
+                <label for="entriesSelectInstructores">Mostrar</label>
+                <select id="entriesSelectInstructores">
+                  <option value="10" selected>10</option>
+                  <option value="25">25</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                </select>
+                <span>registros</span>
+              </div>
+              <div class="controls-right">
+                <label for="tableSearchInstructores">Buscar:</label>
+                <input id="tableSearchInstructores" type="text" placeholder="Buscar..." />
+              </div>
+            </div>
+
+            <table class="data" id="instructoresTable">
+              <thead>
+                <tr>
+                  <th><span class="es-blue">Nombre</span></th>
+                  <th><span class="es-blue">Correo</span></th>
+                  {% for f in extra_fields_instructores %}
+                    <th><span class="es-blue">{{ f.name }}</span></th>
+                  {% endfor %}
+                  <th><span class="es-blue">Status</span></th>
+                  <th class="col-actions"><span class="es-blue">Acción</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% if instructores_rows %}
+                  {% for row in instructores_rows %}
+                    <tr>
+                      <td>{{ row.user.first_name|default:row.user.email|default:row.user.username }}</td>
+                      <td>{{ row.user.email|default:"—" }}</td>
+                      {% for val in row.values_ordered %}
+                        <td>{{ val|default:"" }}</td>
+                      {% endfor %}
+                      <td>
+                        {% if row.status == 'approved' %}
+                          <span class="badge bg-success">Activo</span>
+                        {% elif row.status == 'pending' %}
+                          <span class="badge bg-warning text-dark">Pendiente</span>
+                        {% else %}
+                          <span class="badge bg-secondary">Rechazado</span>
+                        {% endif %}
+                      </td>
+                      <td>
+                        <form method="post" style="display:inline-flex; align-items:center; gap:6px;">
+                          {% csrf_token %}
+                          <input type="hidden" name="action" value="set_status" />
+                          <input type="hidden" name="membership_id" value="{{ row.membership.id }}" />
+                          <select name="status" class="form-select form-select-sm" title="Cambiar estatus" onchange="this.form.submit()" style="min-width:140px;" {% if not is_admin %}disabled{% endif %}>
+                            <option value="" {% if row.status != 'approved' and row.status != 'rejected' %}selected{% endif %}>{% if row.status == 'pending' %}Pendiente{% else %}Status{% endif %}</option>
+                            <option value="rejected" {% if row.status == 'rejected' %}selected{% endif %}>No activo</option>
+                            <option value="approved" {% if row.status == 'approved' %}selected{% endif %}>Activar</option>
+                          </select>
+                          <a href="{% url 'usuario_editar_instructores' congreso.id row.membership.id %}" class="action-btn" title="Editar"><i class="bi bi-pencil"></i></a>
+                          <button type="button" class="action-btn" title="Eliminar" onclick="if(confirm('¿Eliminar esta membresía? Esta acción no se puede deshacer.')){ var f=this.closest('form'); f.querySelector('input[name=action]').value='delete_membership'; f.submit(); }" {% if not is_admin %}disabled{% endif %}>
+                            <i class="bi bi-trash"></i>
+                          </button>
+                        </form>
+                      </td>
+                    </tr>
+                  {% endfor %}
+                {% else %}
+                  <tr>
+                    <td colspan="{{ extra_fields_instructores|length|add:4 }}" style="text-align:center; color:#64748b; padding:26px;">No hay instructores registrados en "{{ congreso.name }}".</td>
+                  </tr>
+                {% endif %}
+              </tbody>
+            </table>
+            <div class="table-footer">
+              <div id="instructoresInfo" class="text-secondary small"></div>
+              <nav aria-label="Paginación de instructores">
+                <ul id="instructoresPager" class="pagination pagination-sm mb-0"></ul>
+              </nav>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% include 'partials/footer.html' %}
+  </div>
+  <script>
+    (function(){
+      // Búsqueda + paginación cliente para instructores
+      var search = document.getElementById('tableSearchInstructores');
+      var select = document.getElementById('entriesSelectInstructores');
+      var table = document.getElementById('instructoresTable');
+      var info = document.getElementById('instructoresInfo');
+      var pager = document.getElementById('instructoresPager');
+      var STORAGE_KEY = 'instructores_rows_per_page';
+      var currentPage = 1;
+      var sortCol = null;
+      var sortAsc = true;
+
+      if(!table) return;
+      var tbody = table.querySelector('tbody');
+
+      function getDataRows(){
+        var all = Array.from(tbody.querySelectorAll('tr'));
+        return all.filter(function(tr){ return !tr.querySelector('td[colspan]'); });
+      }
+
+      function getCellText(tr, idx){
+        var td = tr.children[idx];
+        return (td ? (td.innerText || td.textContent || '').trim() : '');
+      }
+      function isNumericColumn(idx, sampleRows){
+        for(var i=0;i<sampleRows.length;i++){
+          var v = getCellText(sampleRows[i], idx).replace(/\s+/g,'');
+          if(!v) continue;
+          if(!/^[-+]?\d*[\.,]?\d+$/.test(v)) return false;
+        }
+        return true;
+      }
+
+      function buildPager(total, pageSize, page){
+        pager.innerHTML = '';
+        if(total <= pageSize){ return; }
+        var totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+        function addItem(label, targetPage, disabled, active){
+          var li = document.createElement('li');
+          li.className = 'page-item' + (disabled ? ' disabled' : '') + (active ? ' active' : '');
+          var a = document.createElement('a');
+          a.className = 'page-link';
+          a.href = '#';
+          a.textContent = label;
+          a.addEventListener('click', function(ev){ ev.preventDefault(); if(disabled || active) return; currentPage = targetPage; update(); });
+          li.appendChild(a);
+          pager.appendChild(li);
+        }
+
+        addItem('Previous', Math.max(1, page-1), page===1, false);
+        var maxButtons = 7;
+        var start = Math.max(1, page - 3);
+        var end = Math.min(totalPages, start + maxButtons - 1);
+        start = Math.max(1, Math.min(start, end - maxButtons + 1));
+        for(var p=start; p<=end; p++) addItem(String(p), p, false, p===page);
+        addItem('Next', Math.min(totalPages, page+1), page===totalPages, false);
+      }
+
+      function update(){
+        var term = (search && search.value || '').toLowerCase();
+        var rows = getDataRows();
+        var emptyRow = tbody.querySelector('td[colspan]') ? tbody.querySelector('tr') : null;
+        var pageSize = select ? parseInt(select.value || '10', 10) : rows.length;
+
+        var filtered = rows.filter(function(tr){ return (tr.innerText || '').toLowerCase().indexOf(term) !== -1; });
+        if(sortCol !== null){
+          var numeric = isNumericColumn(sortCol, filtered.slice(0,20));
+          filtered.sort(function(a,b){
+            var va = getCellText(a, sortCol);
+            var vb = getCellText(b, sortCol);
+            if(numeric){
+              var na = parseFloat(va.replace(',','.')) || 0;
+              var nb = parseFloat(vb.replace(',','.')) || 0;
+              return sortAsc ? (na-nb) : (nb-na);
+            } else {
+              va = va.toLowerCase(); vb = vb.toLowerCase();
+              if(va < vb) return sortAsc ? -1 : 1;
+              if(va > vb) return sortAsc ? 1 : -1;
+              return 0;
+            }
+          });
+          // Reordenar DOM según el arreglo filtrado/ordenado
+          filtered.forEach(function(tr){ tbody.appendChild(tr); });
+        }
+        var total = filtered.length;
+        var totalPages = Math.max(1, Math.ceil(total / pageSize));
+        if(currentPage > totalPages) currentPage = totalPages;
+        if(currentPage < 1) currentPage = 1;
+
+        rows.forEach(function(tr){ tr.style.display = 'none'; });
+        var startIdx = total ? (currentPage - 1) * pageSize + 1 : 0;
+        var endIdx = total ? Math.min(currentPage * pageSize, total) : 0;
+        filtered.slice(startIdx-1, endIdx).forEach(function(tr){ tr.style.display = ''; });
+
+        if(emptyRow){ emptyRow.style.display = total === 0 ? '' : 'none'; }
+        if(info){ info.textContent = 'Mostrando ' + startIdx + ' a ' + endIdx + ' de ' + total + ' registros'; }
+        buildPager(total, pageSize, currentPage);
+      }
+
+      if(select){
+        var saved = localStorage.getItem(STORAGE_KEY);
+        if(saved && ['10','25','50','100'].includes(saved)) select.value = saved;
+        select.addEventListener('change', function(){ localStorage.setItem(STORAGE_KEY, select.value); currentPage = 1; update(); });
+      }
+      if(search){ search.addEventListener('input', function(){ currentPage = 1; update(); }); }
+      var ths = table.querySelectorAll('thead th');
+      ths.forEach(function(th, idx){
+        if(th.classList.contains('col-actions')) return;
+        th.classList.add('th-sortable');
+        if(!th.querySelector('.sort-icons')){
+          var icons = document.createElement('span');
+          icons.className = 'sort-icons';
+          icons.innerHTML = '<span class="arrow up">▲</span><span class="arrow down">▼</span>';
+          th.appendChild(icons);
+        }
+        th.addEventListener('click', function(){
+          if(sortCol === idx){ sortAsc = !sortAsc; } else { sortCol = idx; sortAsc = true; }
+          ths.forEach(function(h){ h.classList.remove('sorted-asc','sorted-desc'); });
+          th.classList.add(sortAsc ? 'sorted-asc' : 'sorted-desc');
+          currentPage = 1; update();
+        });
+      });
+      update();
+    })();
+  </script>
+</body>
+</html>

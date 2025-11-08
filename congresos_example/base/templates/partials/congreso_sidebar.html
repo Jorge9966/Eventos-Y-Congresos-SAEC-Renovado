@@ -1,0 +1,112 @@
+{% load static %}
+<style>
+  /* Estilo del botón de regresar (solo icono), distinto a los enlaces de menú */
+  .sidebar a.icon-back-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    padding: 0; /* anula padding del estilo general del sidebar */
+    border-radius: 999px;
+    border: 1px solid #e6ebf2;
+    color: #0d6efd; /* azul */
+    background: transparent;
+    transition: background .15s ease, border-color .15s ease, box-shadow .18s ease, transform .15s ease, color .15s ease;
+  }
+  .sidebar a.icon-back-btn .bi { font-size: 1.25rem; }
+  .sidebar a.icon-back-btn:hover {
+    background: rgba(13,110,253,0.08);
+    border-color: #0d6efd;
+    color: #0b5ed7;
+    box-shadow: 0 0 12px rgba(13,110,253,0.55);
+    transform: translateY(-1px) scale(1.04); /* leve acercamiento */
+  }
+</style>
+<div class="sidebar">
+  <div class="sidebar-top" style="padding:4px 2px 4px 2px; margin:-14px 0 0 -12px;"><a class="brand" href="{% url 'inicio_congreso' congreso.id %}"><img src="{% static 'base/img/SAEC.png' %}" alt="SAEC" style="height:64px; width:auto; display:block;" /></a></div>
+  <div class="sidebar-divider" style="margin:0 -20px 2px;"></div>
+  {# Mostrar botón regresar solo si NO es admin con scope y además es Administrador o superuser #}
+  {% if not is_scoped_admin %}
+    {% if rol == 'Administrador' or request.user.is_superuser %}
+      <a class="icon-back-btn" href="{% url 'inicio' %}" title="Regresar"><i class="bi bi-arrow-left-circle"></i></a>
+      <div class="sidebar-divider" style="margin:6px -20px 6px;"></div>
+    {% endif %}
+  {% endif %}
+  <div class="section" style="margin-top:4px;">ADMINISTRAR</div>
+  <a class="nav-item {% if request.resolver_match.url_name == 'inicio_congreso' %}active{% endif %}" href="{% url 'inicio_congreso' congreso.id %}"><i class="bi bi-house"></i> <span>Inicio</span></a>
+  {% with url_name=request.resolver_match.url_name %}
+  {# Grupo: Congreso #}
+  <div class="nav-item link-toggle {% if url_name in 'talleres_list,concursos_list,conferencias_list,inicio_congreso,taller_nuevo,taller_editar,taller_participantes,concurso_nuevo,concurso_editar,concurso_participantes,conferencia_nueva,conferencia_editar,conferencia_participantes' or 'congreso/' in request.path %}open{% endif %}" data-target="#sb-congreso">
+    <i class="bi bi-folder"></i> <span>Congreso</span> <i class="bi bi-chevron-right chev"></i>
+  </div>
+  <div id="sb-congreso" class="submenu {% if url_name in 'talleres_list,concursos_list,conferencias_list,inicio_congreso,taller_nuevo,taller_editar,taller_participantes,concurso_nuevo,concurso_editar,concurso_participantes,conferencia_nueva,conferencia_editar,conferencia_participantes' or 'congreso/' in request.path %}open{% endif %}">
+    <a class="nav-item {% if url_name == 'talleres_list' %}active{% endif %}" href="{% url 'talleres_list' congreso.id %}">Talleres</a>
+    <a class="nav-item {% if url_name == 'concursos_list' %}active{% endif %}" href="{% url 'concursos_list' congreso.id %}">Concursos</a>
+  <a class="nav-item {% if url_name == 'conferencias_list' %}active{% endif %}" href="{% url 'conferencias_list' congreso.id %}">Conferencias</a>
+  </div>
+
+  {# Grupo: Personal #}
+  <div class="nav-item link-toggle {% if url_name == 'instructores' or url_name == 'participantes' %}open{% endif %}" data-target="#sb-personal">
+    <i class="bi bi-folder"></i> <span>Personal</span> <i class="bi bi-chevron-right chev"></i>
+  </div>
+  <div id="sb-personal" class="submenu {% if url_name == 'instructores' or url_name == 'participantes' %}open{% endif %}">
+    <a class="nav-item {% if url_name == 'instructores' %}active{% endif %}" href="{% url 'instructores' congreso.id %}">Instructores</a>
+    <a class="nav-item {% if url_name == 'participantes' %}active{% endif %}" href="{% url 'participantes' congreso.id %}">Participantes</a>
+  </div>
+
+  {# Grupo: Otros #}
+  <div class="nav-item link-toggle {% if url_name == 'logo' or url_name == 'avisos' %}open{% endif %}" data-target="#sb-otros">
+    <i class="bi bi-folder"></i> <span>Otros</span> <i class="bi bi-chevron-right chev"></i>
+  </div>
+  <div id="sb-otros" class="submenu {% if url_name == 'logo' or url_name == 'avisos' %}open{% endif %}">
+    <a class="nav-item {% if url_name == 'logo' %}active{% endif %}" href="{% url 'logo' congreso.id %}">Logo</a>
+    <a class="nav-item {% if url_name == 'avisos' %}active{% endif %}" href="{% url 'avisos' congreso.id %}">Avisos</a>
+  </div>
+  {% endwith %}
+  <div class="section">PERFIL</div>
+  <a class="nav-item {% if request.resolver_match.url_name == 'perfil_congreso' %}active{% endif %}" href="{% url 'perfil_congreso' congreso.id %}"><i class="bi bi-person"></i> <span>Perfil</span></a>
+  <a href="{% url 'logout' %}"><i class="bi bi-box-arrow-right"></i> <span>Salir</span></a>
+  <div style="margin-top:auto; font-size:0.8rem; color:#aaa;">Logeado como: {{ request.user.username }}<br>Sistema de Administración de Congresos o eventos</div>
+</div>
+<script>
+  (function(){
+    var toggles = document.querySelectorAll('.link-toggle');
+    // (El toggle del burger se maneja en el partial del topbar para asegurar que el elemento exista cuando se registra el listener.)
+    function applyState(el, open){
+      var target = document.querySelector(el.getAttribute('data-target'));
+      if(!target) return;
+      target.classList.toggle('open', !!open);
+      el.classList.toggle('open', !!open);
+      try{ localStorage.setItem('sb:'+ (target.id||''), open ? 'open':'closed'); }catch(e){}
+    }
+    function closeOthers(exceptEl){
+      toggles.forEach(function(other){
+        if(other === exceptEl) return;
+        var otherTarget = document.querySelector(other.getAttribute('data-target'));
+        if(!otherTarget) return;
+        if(otherTarget.classList.contains('open')){
+          otherTarget.classList.remove('open');
+          other.classList.remove('open');
+          try{ localStorage.setItem('sb:'+ (otherTarget.id||''), 'closed'); }catch(e){}
+        }
+      });
+    }
+
+    // Inicializar desde localStorage o por link activo dentro del submenú
+    toggles.forEach(function(el){
+      var target = document.querySelector(el.getAttribute('data-target'));
+      if(!target) return;
+      var stored = null;
+      try{ stored = localStorage.getItem('sb:'+ (target.id||'')); }catch(e){}
+      var hasActive = !!target.querySelector('.nav-item.active');
+      var shouldOpen = (stored === 'open') || (stored === null && (hasActive || el.classList.contains('open') || target.classList.contains('open')));
+      applyState(el, shouldOpen);
+      el.addEventListener('click', function(){
+        var willOpen = !target.classList.contains('open');
+        if(willOpen){ closeOthers(el); }
+        applyState(el, willOpen);
+      });
+    });
+  })();
+</script>

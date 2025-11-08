@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Campos - SAEC</title>
+  {% load static %}
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+  body { margin:0; display:flex; min-height:100vh; font-family:'Inter', Arial, Helvetica, sans-serif; background:#d9e0ea; }
+  /* Sidebar */
+  .sidebar { width:260px; flex:0 0 260px; background:#fff; color:#0f172a; display:flex; flex-direction:column; padding:22px 20px; border-right:1px solid #e6ebf2; position:sticky; top:0; height:100vh; overflow-y:auto; transition: flex-basis .22s ease, width .22s ease, padding .22s ease, border-right .22s ease; }
+  .sidebar-divider { height:1px; background:#e9eef5; margin:0 -20px 14px; box-shadow:0 1px 0 rgba(15,23,42,0.03); }
+  .sidebar .section { margin-top:22px; font-size:0.78rem; color:#94a3b8; letter-spacing:.06em; text-transform:uppercase; }
+  .sidebar a { display:flex; align-items:center; gap:10px; padding:10px 10px; color:#334155; text-decoration:none; border-radius:10px; transition: background .12s ease, color .12s ease, box-shadow .12s ease; }
+  .sidebar a .bi{ font-size:1.05rem; color:#64748b; }
+  .sidebar a:hover { color:#0b5ed7; background:#eef5ff; box-shadow: inset 0 2px 8px rgba(37,99,235,0.12), 0 1px 6px rgba(37,99,235,0.08); }
+  .sidebar a:hover .bi{ color:#0b5ed7; }
+  .sidebar a.active{ background:#eaf2ff; color:#2563eb; font-weight:600; }
+  .sidebar a.active .bi{ color:#2563eb; }
+
+  /* Main */
+  .main { flex:1; background:#e3e7f1; padding:0 40px 40px 40px; position:relative; min-height:100vh; -webkit-overflow-scrolling: touch; }
+  .main::before { content:""; position:absolute; top:0; left:0; bottom:0; width:26px; background: linear-gradient(to right, rgba(15,23,42,0.10) 0%, rgba(15,23,42,0.06) 35%, rgba(15,23,42,0.00) 100%); pointer-events:none; }
+  body.sidebar-collapsed .main::before{ width:0; }
+  body.sidebar-collapsed .sidebar{ flex-basis:0; width:0; min-width:0; padding:0; border-right:none; overflow:hidden; }
+
+  /* Topbar */
+  .topbar { position: sticky; top: 0; z-index: 5; display:flex; align-items:center; justify-content:space-between; background:#ffffff; padding:8px 20px; border-bottom:1px solid #e6ebf2; min-height: 52px; margin-left: -40px; margin-right: -40px; width: calc(100% + 80px); box-shadow: 0 10px 18px -14px rgba(15,23,42,0.22); }
+  .topbar::after{ content:""; position:absolute; left:0; right:0; bottom:-12px; height:12px; background: linear-gradient(to bottom, rgba(15,23,42,0.08), rgba(15,23,42,0.00)); pointer-events:none; }
+  .topbar::before{ content:""; position:absolute; left:0; top:0; bottom:0; width:26px; background: linear-gradient(to right, rgba(15,23,42,0.10) 0%, rgba(15,23,42,0.06) 35%, rgba(15,23,42,0.00) 100%); pointer-events:none; }
+  .topbar-left{ display:flex; align-items:center; gap:16px; }
+  .icon-btn{ display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:999px; border:1px solid #e6ebf2; background:#fff; color:#64748b; cursor:pointer; box-shadow: 0 1px 2px rgba(16,24,40,.05); transition: background .12s ease, box-shadow .12s ease, color .12s ease; }
+  .icon-btn:hover{ background:#f7fafc; color:#0f172a; box-shadow: 0 2px 6px rgba(16,24,40,.08); }
+  .icon-btn svg{ width:18px; height:18px; }
+  .topbar-left .icon-btn{ margin-left:-10px; }
+  .icon-btn.user{ width:44px; height:44px; }
+  .icon-btn.user svg{ width:24px; height:24px; }
+
+  /* Hero banner */
+  .hero-banner{ margin-left:-40px; margin-right:-40px; width:calc(100% + 80px); background: linear-gradient(90deg, #1d4ed8 0%, #3b82f6 50%, #5b21b6 100%); color:#fff; min-height:240px; display:flex; align-items:center; padding:32px 40px; }
+  .hero-title{ font-family:'Poppins', 'Inter', Arial, Helvetica, sans-serif; font-weight:300; font-size:2.2rem; margin:0; letter-spacing:.2px; }
+  .hero-subtitle{ font-size:1rem; color:#eef2ff; max-width:920px; }
+
+  /* User dropdown menu */
+  .user-menu{ position:fixed; top:64px; right:24px; width:280px; background:#ffffff; border:1px solid #e6ebf2; border-radius:12px; box-shadow: 0 18px 44px rgba(15,23,42,0.18); display:none; z-index:50; overflow:hidden; }
+  .user-menu.open{ display:block; }
+  .user-menu .um-header{ display:flex; align-items:center; gap:12px; padding:12px 16px; font-weight:700; color:#0b1730; background:#f8fafc; border-bottom:1px solid #e6ebf2; }
+  .user-menu .um-header .avatar{ width:34px; height:34px; display:inline-flex; align-items:center; justify-content:center; border-radius:999px; border:1px solid #e6ebf2; color:#64748b; }
+  .user-menu .um-list a{ display:flex; align-items:center; gap:10px; padding:12px 16px; color:#334155; text-decoration:none; background:#fff; }
+  .user-menu .um-list a:hover{ background:#eef5ff; color:#0b5ed7; }
+  .user-menu .um-list a .bi{ color:#64748b; }
+
+  /* Table card */
+  .table-card{ background:#f7f9fc; border:1px solid #e6ebf2; border-radius:12px; box-shadow: 0 10px 28px rgba(15,23,42,0.06); overflow:hidden; }
+  .table-card .card-header{ background:#f1f5f9; padding:14px 18px; color:#0b1730; font-weight:700; border-bottom:1px solid #e6ebf2; }
+  .table-card .card-body{ padding:0; background:#f9fbfd; }
+  .table-controls{ display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 16px; border-bottom:1px solid #e6ebf2; background:#ffffff; }
+  .controls-left{ display:flex; align-items:center; gap:10px; color:#64748b; font-size:0.95rem; }
+  .controls-left select{ appearance:none; -webkit-appearance:none; -moz-appearance:none; padding:6px 10px; border:1px solid #e2e8f0; border-radius:8px; background:#fff; color:#0f172a; }
+  .controls-right{ display:flex; align-items:center; gap:10px; color:#64748b; font-size:0.95rem; }
+  .controls-right input{ padding:8px 10px; border:1px solid #e2e8f0; border-radius:8px; background:#fff; color:#0f172a; width:220px; }
+  table.data{ width:100%; border-collapse:separate; border-spacing:0; }
+  table.data th, table.data td{ padding:12px 14px; border-bottom:1px solid #eef2f5; color:#334155; }
+  table.data thead th{ background:#eef2f7; color:#0b1730; font-weight:700; }
+  table.data tbody tr:nth-child(even){ background:#f8fafc; }
+  table.data tbody tr:hover{ background:#eef4ff; }
+  table.data tbody tr:last-child td{ border-bottom:none; }
+  .col-actions{ width:130px; text-align:center; }
+  .action-btn{ background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:6px 10px; color:#334155; margin-right:6px; transition: background .12s ease, box-shadow .12s ease, color .12s ease; }
+  .action-btn:hover{ background:#f7fafc; box-shadow: 0 2px 6px rgba(16,24,40,.08); color:#0f172a; }
+  .es-blue{ color:#2563eb; }
+  /* Footer de tabla */
+  .table-footer{ display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 16px; border-top:1px solid #e6ebf2; background:#ffffff; }
+  /* Sort indicators: show both arrows, highlight active */
+  .th-sortable{ cursor:pointer; user-select:none; }
+  .th-sortable .sort-icons{ display:inline-flex; flex-direction:column; margin-left:6px; line-height:0.8; vertical-align:middle; }
+  .th-sortable .arrow{ font-size:0.65rem; color:#94a3b8; }
+  thead th.sorted-asc .arrow.up{ color:#2563eb; }
+  thead th.sorted-desc .arrow.down{ color:#2563eb; }
+  </style>
+</head>
+<body>
+  {% include 'partials/sidebar.html' %}
+  <div class="main">
+    {% include 'partials/topbar.html' %}
+
+    <section class="hero-banner">
+      <div>
+        <h1 class="hero-title">Campos personalizados de registro</h1>
+        <div class="hero-subtitle">Crea campos adicionales que se solicitarán al registrarse en un congreso.</div>
+      </div>
+    </section>
+
+    {% if messages %}
+      <div class="mt-3">
+        {% for message in messages %}
+          <div class="alert {% if 'error' in message.tags %}alert-danger{% elif 'warning' in message.tags %}alert-warning{% else %}alert-success{% endif %}" role="alert">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="table-card" style="margin-top:20px;">
+      <div class="card-header"><span class="es-blue">Campos por congreso</span></div>
+      <div class="card-body">
+        <div class="table-controls">
+          <div class="controls-left">
+            <form method="get" id="congresoForm" style="display:flex; align-items:center; gap:10px;">
+              <label for="congresoSelect">Congreso:</label>
+              <select id="congresoSelect" name="c" onchange="document.getElementById('congresoForm').submit()">
+                {% for cg in congresos %}
+                  <option value="{{ cg.id }}" {% if congreso.id == cg.id %}selected{% endif %}>{{ cg.name }}</option>
+                {% endfor %}
+              </select>
+            </form>
+            <div style="display:flex; align-items:center; gap:10px; margin-left:16px;">
+              <label for="entriesSelect">Mostrar</label>
+              <select id="entriesSelect">
+                <option value="10" selected>10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+              <span>registros</span>
+            </div>
+          </div>
+          <div class="controls-right">
+            <label for="tableSearch">Buscar:</label>
+            <input id="tableSearch" type="text" placeholder="Buscar..." />
+          </div>
+        </div>
+
+        <table class="data" id="camposTable">
+          <thead>
+            <tr>
+              <th><span class="es-blue">Nombre</span></th>
+              <th><span class="es-blue">Visible para</span></th>
+              <th><span class="es-blue">Requerido</span></th>
+              <th><span class="es-blue">Activo</span></th>
+              <th class="col-actions"><span class="es-blue">Acción</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if fields %}
+              {% for f in fields %}
+                <tr>
+                  <td>{{ f.name }}</td>
+                  <td>{{ f.get_role_scope_display }}</td>
+                  <td>{{ f.required|yesno:"Sí,No" }}</td>
+                  <td>{{ f.active|yesno:"Sí,No" }}</td>
+                  <td>
+                    <a class="action-btn" title="Editar" href="{% url 'campos' %}?c={{ congreso.id }}&edit={{ f.id }}"><i class="bi bi-pencil"></i></a>
+                    <form method="post" style="display:inline-block" onsubmit="return confirm('¿Eliminar campo?');">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="delete_field" />
+                      <input type="hidden" name="congreso_id" value="{{ congreso.id }}" />
+                      <input type="hidden" name="field_id" value="{{ f.id }}" />
+                      <button class="action-btn" title="Eliminar"><i class="bi bi-trash"></i></button>
+                    </form>
+                  </td>
+                </tr>
+              {% endfor %}
+            {% else %}
+              <tr>
+                <td colspan="5" style="text-align:center; color:#64748b; padding:26px;">No hay campos definidos para este congreso.</td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+        <div class="table-footer">
+          <div id="camposInfo" class="text-secondary small"></div>
+          <nav aria-label="Paginación de campos">
+            <ul id="camposPager" class="pagination pagination-sm mb-0"></ul>
+          </nav>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-card" style="margin-top:20px;">
+      <div class="card-header">
+        {% if edit_field %}
+          <span class="es-blue">Actualizar campo</span>
+        {% else %}
+          <span class="es-blue">Agregar un nuevo campo</span>
+        {% endif %}
+      </div>
+      <div class="card-body" style="padding:16px; background:#fff;">
+        {% if edit_field %}
+        <form method="post" class="row g-3">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="update_field" />
+          <input type="hidden" name="congreso_id" value="{{ congreso.id }}" />
+          <input type="hidden" name="field_id" value="{{ edit_field.id }}" />
+          <!-- Row 1: Nombre visible + Visible para -->
+          <div class="col-12 col-md-6">
+            <label class="form-label" for="nameInput">Nombre visible</label>
+            <input id="nameInput" name="name" type="text" class="form-control" value="{{ edit_field.name }}" required>
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label" for="roleSelect">Visible para</label>
+            <select id="roleSelect" name="role_scope" class="form-select">
+              <option value="both" {% if edit_field.role_scope == 'both' %}selected{% endif %}>Participantes e Instructores</option>
+              <option value="participante" {% if edit_field.role_scope == 'participante' %}selected{% endif %}>Solo Participantes</option>
+              <option value="instructor" {% if edit_field.role_scope == 'instructor' %}selected{% endif %}>Solo Instructores</option>
+            </select>
+          </div>
+          <!-- Row 2: Requerido + Activo -->
+          <div class="col-6 col-md-3 form-check d-flex align-items-center" style="padding-left:2.2rem;">
+            <input class="form-check-input" type="checkbox" id="requiredCheck" name="required" {% if edit_field.required %}checked{% endif %}>
+            <label class="form-check-label" for="requiredCheck">Requerido</label>
+          </div>
+          <div class="col-6 col-md-3 form-check d-flex align-items-center" style="padding-left:2.2rem;">
+            <input class="form-check-input" type="checkbox" id="activeCheck" name="active" {% if edit_field.active %}checked{% endif %}>
+            <label class="form-check-label" for="activeCheck">Activo</label>
+          </div>
+          <!-- Row 3: Botones -->
+          <div class="col-12" style="display:flex; gap:8px;">
+            <button class="btn btn-primary" type="submit">Actualizar</button>
+            <a class="btn btn-light" href="{% url 'campos' %}?c={{ congreso.id }}">Cancelar</a>
+          </div>
+        </form>
+        {% else %}
+        <form method="post" class="row g-3">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="add_field" />
+          <input type="hidden" name="congreso_id" value="{{ congreso.id }}" />
+          <!-- Row 1: Nombre visible + Visible para -->
+          <div class="col-12 col-md-6">
+            <label class="form-label" for="nameInput">Nombre visible</label>
+            <input id="nameInput" name="name" type="text" class="form-control" placeholder="Ej. Número de control" required>
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label" for="roleSelect">Visible para</label>
+            <select id="roleSelect" name="role_scope" class="form-select">
+              <option value="both">Participantes e Instructores</option>
+              <option value="participante">Solo Participantes</option>
+              <option value="instructor">Solo Instructores</option>
+            </select>
+          </div>
+          <!-- Row 2: Requerido + Activo -->
+          <div class="col-6 col-md-3 form-check d-flex align-items-center" style="padding-left:2.2rem;">
+            <input class="form-check-input" type="checkbox" id="requiredCheck" name="required">
+            <label class="form-check-label" for="requiredCheck">Requerido</label>
+          </div>
+          <div class="col-6 col-md-3 form-check d-flex align-items-center" style="padding-left:2.2rem;">
+            <input class="form-check-input" type="checkbox" id="activeCheck" name="active" checked>
+            <label class="form-check-label" for="activeCheck">Activo</label>
+          </div>
+          <!-- Row 3: Botón Guardar -->
+          <div class="col-12">
+            <button class="btn btn-primary" type="submit">Guardar</button>
+          </div>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+
+    {% include 'partials/footer.html' %}
+  </div>
+
+  <script>
+    (function(){
+      var btn = document.getElementById('btnBurger');
+      if(btn){ btn.addEventListener('click', function(){ document.body.classList.toggle('sidebar-collapsed'); }); }
+
+      // User menu toggle (como en correos.html)
+      var userBtn = document.getElementById('btnUser');
+      var userMenu = document.getElementById('userMenu');
+      function closeUserMenu(){ if(userMenu) userMenu.classList.remove('open'); }
+      if(userBtn && userMenu){
+        userBtn.addEventListener('click', function(e){ e.stopPropagation(); userMenu.classList.toggle('open'); });
+        document.addEventListener('click', function(){ closeUserMenu(); });
+        document.addEventListener('keydown', function(ev){ if(ev.key === 'Escape') closeUserMenu(); });
+        userMenu.addEventListener('click', function(e){ e.stopPropagation(); });
+      }
+
+      // Búsqueda + paginación simple en cliente (igual a correos)
+      (function initTablePaging(){
+        var search = document.getElementById('tableSearch');
+        var select = document.getElementById('entriesSelect');
+        var table = document.getElementById('camposTable');
+        var info = document.getElementById('camposInfo');
+        var pager = document.getElementById('camposPager');
+        var STORAGE_KEY = 'campos_rows_per_page';
+        var currentPage = 1;
+        var sortCol = null;
+        var sortAsc = true;
+
+        if(!table) return;
+        var tbody = table.querySelector('tbody');
+
+        function getDataRows(){
+          var all = Array.from(tbody.querySelectorAll('tr'));
+          return all.filter(function(tr){ return !tr.querySelector('td[colspan]'); });
+        }
+        function getCellText(tr, idx){ var td = tr.children[idx]; return (td ? (td.innerText||td.textContent||'').trim() : ''); }
+        function isNumericColumn(idx, sample){
+          for(var i=0;i<sample.length;i++){ var v=getCellText(sample[i], idx).replace(/\s+/g,''); if(!v) continue; if(!/^[-+]?\d*[\.,]?\d+$/.test(v)) return false; }
+          return true;
+        }
+
+        function buildPager(total, pageSize, page){
+          pager.innerHTML = '';
+          if(total <= pageSize){ return; }
+          var totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+          function addItem(label, targetPage, disabled, active){
+            var li = document.createElement('li');
+            li.className = 'page-item' + (disabled ? ' disabled' : '') + (active ? ' active' : '');
+            var a = document.createElement('a');
+            a.className = 'page-link';
+            a.href = '#';
+            a.textContent = label;
+            a.addEventListener('click', function(ev){ ev.preventDefault(); if(disabled || active) return; currentPage = targetPage; update(); });
+            li.appendChild(a);
+            pager.appendChild(li);
+          }
+
+          addItem('Previous', Math.max(1, page-1), page===1, false);
+
+          var maxButtons = 7;
+          var start = Math.max(1, page - 3);
+          var end = Math.min(totalPages, start + maxButtons - 1);
+          start = Math.max(1, Math.min(start, end - maxButtons + 1));
+
+          for(var p=start; p<=end; p++){
+            addItem(String(p), p, false, p===page);
+          }
+
+          addItem('Next', Math.min(totalPages, page+1), page===totalPages, false);
+        }
+
+        function update(){
+          var term = (search && search.value || '').toLowerCase();
+          var rows = getDataRows();
+          var emptyRow = tbody.querySelector('td[colspan]') ? tbody.querySelector('tr') : null;
+          var pageSize = select ? parseInt(select.value || '10', 10) : rows.length;
+
+          var filtered = rows.filter(function(tr){ return (tr.innerText || '').toLowerCase().indexOf(term) !== -1; });
+          if(sortCol !== null){
+            var numeric = isNumericColumn(sortCol, filtered.slice(0,20));
+            filtered.sort(function(a,b){
+              var va=getCellText(a, sortCol), vb=getCellText(b, sortCol);
+              if(numeric){ var na=parseFloat(va.replace(',','.'))||0, nb=parseFloat(vb.replace(',','.'))||0; return sortAsc ? (na-nb) : (nb-na); }
+              va=va.toLowerCase(); vb=vb.toLowerCase(); if(va<vb) return sortAsc?-1:1; if(va>vb) return sortAsc?1:-1; return 0;
+            });
+            // Reordenar DOM según el arreglo filtrado/ordenado
+            filtered.forEach(function(tr){ tbody.appendChild(tr); });
+          }
+          var total = filtered.length;
+          var totalPages = Math.max(1, Math.ceil(total / pageSize));
+          if(currentPage > totalPages) currentPage = totalPages;
+          if(currentPage < 1) currentPage = 1;
+
+          rows.forEach(function(tr){ tr.style.display = 'none'; });
+
+          var startIdx = total ? (currentPage - 1) * pageSize + 1 : 0; // 1-based
+          var endIdx = total ? Math.min(currentPage * pageSize, total) : 0;
+          filtered.slice(startIdx-1, endIdx).forEach(function(tr){ tr.style.display = ''; });
+
+          if(emptyRow){ emptyRow.style.display = total === 0 ? '' : 'none'; }
+
+          if(info){ info.textContent = 'Mostrando ' + startIdx + ' a ' + endIdx + ' de ' + total + ' registros'; }
+
+          buildPager(total, pageSize, currentPage);
+        }
+
+        if(select){
+          var saved = localStorage.getItem(STORAGE_KEY);
+          if(saved && ['10','25','50','100'].includes(saved)) select.value = saved;
+          select.addEventListener('change', function(){ localStorage.setItem(STORAGE_KEY, select.value); currentPage = 1; update(); });
+        }
+        if(search){ search.addEventListener('input', function(){ currentPage = 1; update(); }); }
+
+        // Sortable headers with indicators (skip Accion column)
+        var ths = table.querySelectorAll('thead th');
+        ths.forEach(function(th, idx){
+          if(th.classList.contains('col-actions')) return;
+          th.classList.add('th-sortable');
+          if(!th.querySelector('.sort-icons')){
+            var icons = document.createElement('span');
+            icons.className = 'sort-icons';
+            icons.innerHTML = '<span class="arrow up">▲</span><span class="arrow down">▼</span>';
+            th.appendChild(icons);
+          }
+          th.addEventListener('click', function(){
+            if(sortCol===idx){ sortAsc=!sortAsc; } else { sortCol=idx; sortAsc=true; }
+            ths.forEach(function(h){ h.classList.remove('sorted-asc','sorted-desc'); });
+            th.classList.add(sortAsc ? 'sorted-asc' : 'sorted-desc');
+            currentPage=1; update();
+          });
+        });
+
+        update();
+      })();
+    })();
+  </script>
+</body>
+</html>

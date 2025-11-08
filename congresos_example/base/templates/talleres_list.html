@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Talleres - SAEC</title>
+  {% load static %}
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+  {% include '_congreso_base_styles.html' %}
+  <style>
+    .cards-wrap{ margin-top:22px; }
+    .work-card{ background:#fff; border:1px solid #e6ebf2; border-radius:12px; box-shadow:0 10px 24px rgba(15,23,42,0.06); padding:16px; height:100%; transition:transform .2s ease, box-shadow .2s ease; }
+  .work-thumb{ width:100%; height:200px; object-fit:contain; background:#fff; border-radius:10px; display:block; }
+    .work-title{ font-weight:800; font-size:1.4rem; color:#0b1730; line-height:1.25; margin:12px 0; transition:color .2s ease; }
+    .work-meta{ color:#475569; font-size:1rem; }
+    .work-divider{ height:1px; background:#eef2f7; margin:12px 0; }
+    .stat{ color:#64748b; font-size:.9rem; display:flex; align-items:center; gap:6px; }
+    .status-badge{ background:#22c55e; color:#fff; border-radius:24px; padding:4px 12px; font-weight:600; font-size:.85rem; }
+    .icon-actions .btn{ display:inline-flex; align-items:center; justify-content:center; width:44px; height:40px; padding:0; }
+    .work-card:hover{ transform:translateY(-4px); box-shadow:0 16px 36px rgba(15,23,42,0.12); }
+    .work-card:hover .work-title{ color:#f97316; }
+  </style>
+</head>
+<body>
+  {% include 'partials/congreso_sidebar.html' %}
+  <div class="main">
+    {% include 'partials/congreso_topbar.html' %}
+
+    <section class="hero-banner">
+      <div class="container-fluid d-flex align-items-center justify-content-between px-0">
+        <h1 class="hero-title">Talleres</h1>
+        <div class="d-flex gap-2">
+          <a href="#" class="btn btn-light" aria-label="Descargar reporte" title="Descargar reporte"><i class="bi bi-download"></i></a>
+          <a href="{% url 'taller_nuevo' congreso.id %}" class="btn btn-primary" aria-label="Agregar taller" title="Agregar taller"><i class="bi bi-plus-lg"></i></a>
+        </div>
+      </div>
+    </section>
+
+    <div class="container-fluid px-0 cards-wrap">
+      {% if messages %}
+        {% for m in messages %}
+          <div class="alert alert-{% if 'error' in m.tags %}danger{% else %}{{ m.tags }}{% endif %}">{{ m }}</div>
+        {% endfor %}
+      {% endif %}
+      {% if talleres %}
+      <div class="row g-4">
+        {% for t in talleres %}
+        <div class="col-12 col-md-6 col-xl-4">
+          <div class="work-card">
+            {% if t.image %}
+              <img class="work-thumb" src="{{ t.image.url }}" alt="{{ t.title }}" />
+            {% endif %}
+            <h2 class="work-title">{{ t.title }}</h2>
+            <div class="work-meta">
+              <div><strong>Responsable:</strong>
+                {% if t.instructor %}
+                  {{ t.instructor.first_name|default:t.instructor.username }}
+                {% else %}
+                  —
+                {% endif %}
+              </div>
+              {% if t.lugar %}<div><strong>Lugar:</strong> {{ t.lugar }}</div>{% endif %}
+            </div>
+            <div class="work-divider"></div>
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+              <div class="stat"><i class="bi bi-people"></i>
+                0 participantes de {{ t.cupo_maximo|default:35 }}
+              </div>
+              <span class="status-badge">Disponible</span>
+            </div>
+            <div class="mt-3 d-flex gap-2 icon-actions">
+              <a href="{% url 'taller_editar' congreso.id t.id %}" class="btn btn-warning" title="Editar" aria-label="Editar"><i class="bi bi-pencil-square"></i></a>
+              {% if is_admin %}
+              <form method="post" class="d-inline" onsubmit="return confirm('¿Eliminar este taller? Esta acción no se puede deshacer.');">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="delete_taller" />
+                <input type="hidden" name="taller_id" value="{{ t.id }}" />
+                <button type="submit" class="btn btn-danger" title="Eliminar" aria-label="Eliminar">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </form>
+              {% endif %}
+              <a href="{% url 'taller_participantes' congreso.id t.id %}" class="btn btn-primary" title="Ver lista" aria-label="Ver lista"><i class="bi bi-people"></i></a>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+        <div class="empty">Aún no hay talleres registrados para "{{ congreso.name }}".</div>
+      {% endif %}
+    </div>
+    {% include 'partials/footer.html' %}
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

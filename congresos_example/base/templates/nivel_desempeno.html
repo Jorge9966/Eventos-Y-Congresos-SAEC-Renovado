@@ -78,54 +78,21 @@
 
     /* Texto español en azul dentro de la tabla */
     .es-blue{ color:#2563eb; }
+    /* Footer de tabla: info y paginador */
+    .table-footer{ display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 16px; border-top:1px solid #e6ebf2; background:#ffffff; }
+  /* Sort indicators: show both arrows, highlight active */
+  .th-sortable{ cursor:pointer; user-select:none; }
+  .th-sortable .sort-icons{ display:inline-flex; flex-direction:column; margin-left:6px; line-height:0.8; vertical-align:middle; }
+  .th-sortable .arrow{ font-size:0.65rem; color:#94a3b8; }
+  thead th.sorted-asc .arrow.up{ color:#2563eb; }
+  thead th.sorted-desc .arrow.down{ color:#2563eb; }
   </style>
 </head>
 <body>
-  <div class="sidebar">
-  <div class="sidebar-top"><a class="brand" href="{% url 'inicio' %}">SAEC</a></div>
-    <div class="sidebar-divider"></div>
-    <div class="section">
-      {% if rol == "Instructor" %} INSTRUCTOR {% elif rol == "Participante" %} PARTICIPANTE {% else %} ADMINISTRADOR {% endif %}
-    </div>
-    <a href="{% url 'inicio' %}"><i class="bi bi-house"></i> <span>Inicio</span></a>
-  <a href="{% url 'congresos_eventos' %}"><i class="bi bi-folder"></i> <span>Congresos o eventos</span></a>
-    <div class="section">CONFIGURACIÓN</div>
-    <a href="{% url 'correos' %}"><i class="bi bi-envelope"></i> <span>Correos</span></a>
-    <a href="{% url 'nivel_desempeno' %}" class="active"><i class="bi bi-collection"></i> <span>Nivel de desempeño</span></a>
-  <div class="section">PERFIL</div>
-  <a href="{% url 'perfil' %}"><i class="bi bi-person"></i> <span>Perfil</span></a>
-    <a href="{% url 'logout' %}"><i class="bi bi-box-arrow-right"></i> <span>Salir</span></a>
-  <div style="margin-top:auto; font-size:0.8rem; color:#aaa;">Logeado como: {{ request.user.username }}<br>Sistema de Administración de Congresos o eventos</div>
-  </div>
+  {% include 'partials/sidebar.html' %}
 
   <div class="main">
-    <div class="topbar">
-      <div class="topbar-left">
-        <button id="btnBurger" class="icon-btn" aria-label="Abrir menú" title="Menú">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="3" y1="6" x2="21" y2="6"/>
-            <line x1="3" y1="12" x2="21" y2="12"/>
-            <line x1="3" y1="18" x2="21" y2="18"/>
-          </svg>
-        </button>
-      </div>
-      <button id="btnUser" class="icon-btn user" aria-label="Usuario" title="Usuario">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-          <circle cx="12" cy="7" r="4"/>
-        </svg>
-      </button>
-    </div>
-    <div id="userMenu" class="user-menu" aria-hidden="true">
-      <div class="um-header">
-        <span class="avatar"><i class="bi bi-person"></i></span>
-        <span>{{ request.user.first_name|default:request.user.username }}</span>
-      </div>
-      <div class="um-list">
-        <a href="{% url 'perfil' %}"><i class="bi bi-gear"></i> <span>Modificar Perfil</span></a>
-        <a href="{% url 'logout' %}"><i class="bi bi-box-arrow-right"></i> <span>Salir</span></a>
-      </div>
-    </div>
+    {% include 'partials/topbar.html' %}
 
     <section class="hero-banner">
       <div class="hero-content">
@@ -175,7 +142,6 @@
           <table class="data" id="nivelesTable">
             <thead>
               <tr>
-                <th style="width:80px;"><span class="es-blue">Id</span></th>
                 <th><span class="es-blue">Nivel de desempeño</span></th>
                 <th class="col-actions"><span class="es-blue">Acción</span></th>
               </tr>
@@ -184,7 +150,6 @@
               {% if niveles %}
                 {% for item in niveles %}
                 <tr>
-                  <td>{{ item.id }}</td>
                   <td>{{ item.name }}</td>
                   <td>
                     <a class="action-btn" title="Editar" href="{% url 'nivel_desempeno' %}?c={{ congreso.id }}&edit={{ item.id }}"><i class="bi bi-pencil"></i></a>
@@ -200,11 +165,17 @@
                 {% endfor %}
               {% else %}
                 <tr>
-                  <td colspan="3" style="text-align:center; color:#64748b; padding:26px;">No hay niveles registrados para este congreso.</td>
+                  <td colspan="2" style="text-align:center; color:#64748b; padding:26px;">No hay niveles registrados para este congreso.</td>
                 </tr>
               {% endif %}
             </tbody>
           </table>
+          <div class="table-footer">
+            <div id="nivelesInfo" class="text-secondary small"></div>
+            <nav aria-label="Paginación de niveles">
+              <ul id="nivelesPager" class="pagination pagination-sm mb-0"></ul>
+            </nav>
+          </div>
         </div>
       </div>
 
@@ -249,6 +220,7 @@
         </div>
       </div>
     </div>
+    {% include 'partials/footer.html' %}
   </div>
 
   <script>
@@ -267,39 +239,119 @@
         userMenu.addEventListener('click', function(e){ e.stopPropagation(); });
       }
 
-    // Búsqueda y límite simple en cliente
-    var search = document.getElementById('tableSearch');
-    var select = document.getElementById('entriesSelect');
-    var table = document.getElementById('nivelesTable');
-    var STORAGE_KEY = 'niveles_rows_per_page';
-      function updateTableView(){
-        var term = (search && search.value || '').toLowerCase();
-        var rows = Array.from(table.querySelectorAll('tbody tr'));
-        var limit = select ? parseInt(select.value || '10', 10) : rows.length;
-        var shown = 0;
-        rows.forEach(function(tr){
-          var cellsText = tr.innerText.toLowerCase();
-          var match = term ? cellsText.indexOf(term) !== -1 : true;
-          if(match){
-            if(shown < limit){ tr.style.display = ''; shown++; }
-            else{ tr.style.display = 'none'; }
-          } else {
-            tr.style.display = 'none';
-          }
-        });
+    // Búsqueda + paginación simple en cliente (estilo DataTables)
+    (function initTablePaging(){
+      var search = document.getElementById('tableSearch');
+      var select = document.getElementById('entriesSelect');
+      var table = document.getElementById('nivelesTable');
+      var info = document.getElementById('nivelesInfo');
+      var pager = document.getElementById('nivelesPager');
+      var STORAGE_KEY = 'niveles_rows_per_page';
+      var currentPage = 1;
+  var sortCol = null;
+  var sortAsc = true;
+
+      if(!table) return;
+      var tbody = table.querySelector('tbody');
+
+      function getDataRows(){
+        var all = Array.from(tbody.querySelectorAll('tr'));
+        return all.filter(function(tr){ return !tr.querySelector('td[colspan]'); });
       }
-      if(search){ search.addEventListener('input', updateTableView); }
+      function getCellText(tr, idx){ var td = tr.children[idx]; return (td ? (td.innerText||td.textContent||'').trim() : ''); }
+      function isNumericColumn(idx, sample){
+        for(var i=0;i<sample.length;i++){ var v=getCellText(sample[i], idx).replace(/\s+/g,''); if(!v) continue; if(!/^[-+]?\d*[\.,]?\d+$/.test(v)) return false; }
+        return true;
+      }
+
+      function buildPager(total, pageSize, page){
+        pager.innerHTML = '';
+        if(total <= pageSize){ return; }
+        var totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+        function addItem(label, targetPage, disabled, active){
+          var li = document.createElement('li');
+          li.className = 'page-item' + (disabled ? ' disabled' : '') + (active ? ' active' : '');
+          var a = document.createElement('a');
+          a.className = 'page-link';
+          a.href = '#';
+          a.textContent = label;
+          a.addEventListener('click', function(ev){ ev.preventDefault(); if(disabled || active) return; currentPage = targetPage; update(); });
+          li.appendChild(a);
+          pager.appendChild(li);
+        }
+
+        addItem('Previous', Math.max(1, page-1), page===1, false);
+        var maxButtons = 7;
+        var start = Math.max(1, page - 3);
+        var end = Math.min(totalPages, start + maxButtons - 1);
+        start = Math.max(1, Math.min(start, end - maxButtons + 1));
+        for(var p=start; p<=end; p++){
+          addItem(String(p), p, false, p===page);
+        }
+        addItem('Next', Math.min(totalPages, page+1), page===totalPages, false);
+      }
+
+      function update(){
+        var term = (search && search.value || '').toLowerCase();
+        var rows = getDataRows();
+        var emptyRow = tbody.querySelector('td[colspan]') ? tbody.querySelector('tr') : null;
+        var pageSize = select ? parseInt(select.value || '10', 10) : rows.length;
+
+        var filtered = rows.filter(function(tr){ return (tr.innerText || '').toLowerCase().indexOf(term) !== -1; });
+        if(sortCol !== null){
+          var numeric = isNumericColumn(sortCol, filtered.slice(0,20));
+          filtered.sort(function(a,b){
+            var va=getCellText(a, sortCol), vb=getCellText(b, sortCol);
+            if(numeric){ var na=parseFloat(va.replace(',','.'))||0, nb=parseFloat(vb.replace(',','.'))||0; return sortAsc ? (na-nb) : (nb-na); }
+            va=va.toLowerCase(); vb=vb.toLowerCase(); if(va<vb) return sortAsc?-1:1; if(va>vb) return sortAsc?1:-1; return 0;
+          });
+          // Reordenar DOM según el arreglo filtrado/ordenado
+          filtered.forEach(function(tr){ tbody.appendChild(tr); });
+        }
+        var total = filtered.length;
+        var totalPages = Math.max(1, Math.ceil(total / pageSize));
+        if(currentPage > totalPages) currentPage = totalPages;
+        if(currentPage < 1) currentPage = 1;
+
+        rows.forEach(function(tr){ tr.style.display = 'none'; });
+        var startIdx = total ? (currentPage - 1) * pageSize + 1 : 0;
+        var endIdx = total ? Math.min(currentPage * pageSize, total) : 0;
+        filtered.slice(startIdx-1, endIdx).forEach(function(tr){ tr.style.display = ''; });
+
+        if(emptyRow){ emptyRow.style.display = total === 0 ? '' : 'none'; }
+
+        if(info){ info.textContent = 'Mostrando ' + startIdx + ' a ' + endIdx + ' de ' + total + ' registros'; }
+        buildPager(total, pageSize, currentPage);
+      }
+
       if(select){
         var saved = localStorage.getItem(STORAGE_KEY);
-        if(saved && ['10','25','50','100'].includes(saved)){
-          select.value = saved;
-        }
-        select.addEventListener('change', function(){
-          localStorage.setItem(STORAGE_KEY, select.value);
-          updateTableView();
-        });
+        if(saved && ['10','25','50','100'].includes(saved)) select.value = saved;
+        select.addEventListener('change', function(){ localStorage.setItem(STORAGE_KEY, select.value); currentPage = 1; update(); });
       }
-      if(table){ updateTableView(); }
+  if(search){ search.addEventListener('input', function(){ currentPage = 1; update(); }); }
+  // Sort headers (skip Accion)
+  var ths = table.querySelectorAll('thead th');
+  ths.forEach(function(th, idx){
+    if(th.classList.contains('col-actions')) return;
+    th.classList.add('th-sortable');
+    if(!th.querySelector('.sort-icons')){
+      var icons = document.createElement('span');
+      icons.className = 'sort-icons';
+      icons.innerHTML = '<span class="arrow up">▲</span><span class="arrow down">▼</span>';
+      th.appendChild(icons);
+    }
+    th.addEventListener('click', function(){
+      if(sortCol===idx){ sortAsc=!sortAsc; } else { sortCol=idx; sortAsc=true; }
+      ths.forEach(function(h){ h.classList.remove('sorted-asc','sorted-desc'); });
+      th.classList.add(sortAsc ? 'sorted-asc' : 'sorted-desc');
+      currentPage=1; update();
+    });
+  });
+
+      update();
+    })();
     })();
   </script>
 </body>

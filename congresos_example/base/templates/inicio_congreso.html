@@ -63,58 +63,56 @@
     .wc-quote{ color:#0f172a; opacity:.8; }
     .wc-action.btn-green{ background:#28a745; color:#fff; border:none; padding:10px 20px; border-radius:8px; box-shadow: 0 6px 14px rgba(40,167,69,.22); }
   .wc-right{ flex:1; display:flex; align-items:center; justify-content:center; }
-  /* Espaciador para mantener el layout sin ilustración */
+  /* Espaciador para mantener el layout cuando no hay logo */
   .wc-spacer{ width:280px; height:180px; }
+  .wc-logo{ width:280px; height:180px; display:flex; align-items:center; justify-content:center; }
+  .wc-logo img{ max-width:100%; max-height:100%; object-fit:contain; display:block; }
 
     .panel{ background:#fff; border:1px solid #e6ebf2; border-radius:12px; box-shadow: 0 10px 28px rgba(15,23,42,0.06); margin-top:24px; }
     .panel .panel-header{ padding:14px 18px; font-weight:700; color:#0b1730; border-bottom:1px solid #e6ebf2; }
     .panel .panel-body{ padding:16px 18px; }
     .empty{ color:#64748b; }
+  /* Submenús del sidebar (desplegables con animación) */
+  .link-toggle{ cursor:pointer; }
+  .link-toggle .chev{ margin-left:auto; color:#94a3b8; transition: transform .18s ease; }
+  .link-toggle.open .chev{ transform: rotate(90deg); }
+  .submenu{ margin-left:12px; padding-left:12px; border-left:1px solid #e6ebf2; max-height:0; overflow:hidden; opacity:0; transition: max-height .28s ease, opacity .20s ease; }
+  .submenu.open{ max-height:600px; opacity:1; }
+  .submenu .nav-item{ transition: transform .18s ease, opacity .18s ease; transform: translateY(-4px); opacity:.0; }
+  .submenu.open .nav-item{ transform: translateY(0); opacity:1; }
+  /* Controles de tabla (estilo similar a 'correos') */
+  .table-controls{ display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 16px; border-bottom:1px solid #e6ebf2; background:#ffffff; border-top-left-radius:12px; border-top-right-radius:12px; }
+  .controls-left{ display:flex; align-items:center; gap:10px; color:#64748b; font-size:0.95rem; }
+  .controls-left select{ appearance:none; -webkit-appearance:none; -moz-appearance:none; padding:6px 10px; border:1px solid #e2e8f0; border-radius:8px; background:#fff; color:#0f172a; }
+  .controls-right{ display:flex; align-items:center; gap:10px; color:#64748b; font-size:0.95rem; }
+  .controls-right input{ padding:8px 10px; border:1px solid #e2e8f0; border-radius:8px; background:#fff; color:#0f172a; width:220px; }
+  .table-footer{ display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 16px; border-top:1px solid #e6ebf2; background:#ffffff; border-bottom-left-radius:12px; border-bottom-right-radius:12px; }
+  /* Sort indicators for tables: show both arrows, highlight active */
+  .th-sortable{ cursor:pointer; user-select:none; }
+  .th-sortable .sort-icons{ display:inline-flex; flex-direction:column; margin-left:6px; line-height:0.8; vertical-align:middle; }
+  .th-sortable .arrow{ font-size:0.65rem; color:#94a3b8; }
+  thead th.sorted-asc .arrow.up{ color:#2563eb; }
+  thead th.sorted-desc .arrow.down{ color:#2563eb; }
   </style>
 </head>
 <body>
-  <div class="sidebar">
-    <div class="sidebar-top"><a class="brand" href="{% url 'inicio_congreso' congreso.id %}">SAEC</a></div>
-    <div class="sidebar-divider"></div>
-    <div class="section">ADMINISTRAR</div>
-    <div class="nav-item active"><i class="bi bi-house"></i> <span>Inicio</span></div>
-    <div class="nav-item"><i class="bi bi-folder"></i> <span>Congreso</span> <i class="bi bi-chevron-right" style="margin-left:auto; color:#94a3b8;"></i></div>
-    <div class="nav-item"><i class="bi bi-folder"></i> <span>Personal</span> <i class="bi bi-chevron-right" style="margin-left:auto; color:#94a3b8;"></i></div>
-    <div class="nav-item"><i class="bi bi-folder"></i> <span>Otros</span> <i class="bi bi-chevron-right" style="margin-left:auto; color:#94a3b8;"></i></div>
-  <div class="section">PERFIL</div>
-  <div class="nav-item"><i class="bi bi-person"></i> <span>Perfil</span></div>
-  <a href="{% url 'logout' %}"><i class="bi bi-box-arrow-right"></i> <span>Salir</span></a>
-    <div style="margin-top:auto; font-size:0.8rem; color:#aaa;">Logeado como: {{ request.user.username }}<br>Sistema de Administración de Congresos o eventos</div>
-  </div>
+  {% include 'partials/congreso_sidebar.html' %}
 
   <div class="main">
-    <div class="topbar">
-      <div class="topbar-left">
-        <button id="btnBurger" class="icon-btn" aria-label="Abrir menú" title="Menú">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="3" y1="6" x2="21" y2="6"/>
-            <line x1="3" y1="12" x2="21" y2="12"/>
-            <line x1="3" y1="18" x2="21" y2="18"/>
-          </svg>
-        </button>
-      </div>
-      <button id="btnUser" class="icon-btn user" aria-label="Usuario" title="Usuario">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-          <circle cx="12" cy="7" r="4"/>
-        </svg>
-      </button>
-    </div>
-    <div id="userMenu" class="user-menu" aria-hidden="true">
-      <div class="um-header">
-        <span class="avatar"><i class="bi bi-person"></i></span>
-        <span>{{ request.user.first_name|default:request.user.username }}</span>
-      </div>
-      <div class="um-list">
-        <a href="{% url 'perfil' %}"><i class="bi bi-gear"></i> <span>Modificar Perfil</span></a>
-        <a href="{% url 'logout' %}"><i class="bi bi-box-arrow-right"></i> <span>Salir</span></a>
-      </div>
-    </div>
+    {% include 'partials/congreso_topbar.html' %}
+
+    {# Avisos solo para aprobaciones/rechazos realizados aquí #}
+    {% if messages %}
+      {% for m in messages %}
+        {% if 'approval' in m.tags %}
+          {# Mapear correctamente a clases de Bootstrap: success/info/warning/error #}
+          <div class="alert {% if 'error' in m.tags %}alert-danger{% elif 'success' in m.tags %}alert-success{% elif 'warning' in m.tags %}alert-warning{% elif 'info' in m.tags %}alert-info{% else %}alert-secondary{% endif %} alert-dismissible fade show" role="alert" style="margin-top:16px;">
+            {{ m }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endif %}
+      {% endfor %}
+    {% endif %}
 
     <div class="hero">
       <h1>{{ congreso.name }}</h1>
@@ -126,44 +124,74 @@
         <div class="wc-quote">“La educación no cambia al mundo: cambia a las personas que van a cambiar el mundo.”</div>
         <div class="text-end mt-3" style="color:#475569;">– Paulo Freire</div>
         <div class="mt-3">
-          <a href="{% url 'correos' %}?c={{ congreso.id }}" class="btn wc-action btn-green">Administrar Instructores <i class="bi bi-arrow-right-short"></i></a>
+          <a href="{% url 'instructores' congreso.id %}" class="btn wc-action btn-green">Administrar Instructores <i class="bi bi-arrow-right-short"></i></a>
         </div>
       </div>
       <div class="wc-right">
-        <div class="wc-spacer" aria-hidden="true"></div>
+        {% if congreso.logo %}
+          <div class="wc-logo"><img src="{{ congreso.logo.url }}" alt="Logo de {{ congreso.name }}" /></div>
+        {% else %}
+          <div class="wc-spacer" aria-hidden="true"></div>
+        {% endif %}
       </div>
     </div>
 
     <div class="panel">
-      <div class="panel-header">Lista de instructores en espera</div>
+      <div class="panel-header d-flex align-items-center justify-content-between">
+        <span class="panel-title-blue">Solicitudes pendientes</span>
+        <span class="badge text-bg-primary">{{ pending_memberships|length }}</span>
+      </div>
       <div class="panel-body">
-        <div class="empty">Aún no hay instructores en espera para este congreso.</div>
+        {% if pending_memberships %}
+          <div class="table-responsive">
+            <table class="table align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Usuario</th>
+                  <th>Nombre</th>
+                  <th>Rol</th>
+                  <th>Fecha</th>
+                  <th class="text-end">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for m in pending_memberships %}
+                  <tr>
+                    <td style="white-space:nowrap;">{{ m.user.username }}</td>
+                    <td>{{ m.user.first_name }} {{ m.user.last_name }}</td>
+                    <td class="text-capitalize">{{ m.role }}</td>
+                    <td>{{ m.created_at|date:"Y-m-d H:i" }}</td>
+                    <td class="text-end" style="white-space:nowrap;">
+                      {% if is_admin %}
+                      <form method="post" style="display:inline-block; margin-right:6px;">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="approve_membership" />
+                        <input type="hidden" name="membership_id" value="{{ m.id }}" />
+                        <button type="submit" class="btn btn-sm btn-success"><i class="bi bi-check-lg"></i></button>
+                      </form>
+                      <form method="post" style="display:inline-block;">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="reject_membership" />
+                        <input type="hidden" name="membership_id" value="{{ m.id }}" />
+                        <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-x-lg"></i></button>
+                      </form>
+                      {% else %}
+                        <span class="text-muted">Sin permisos</span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="empty">Aún no hay solicitudes en espera para este congreso.</div>
+        {% endif %}
       </div>
     </div>
-  </div>
-  <script>
-    // Toggle de sidebar y menú de usuario (misma interacción que 'inicio')
-    (function(){
-      var btn = document.getElementById('btnBurger');
-      if(btn){
-        btn.addEventListener('click', function(){
-          document.body.classList.toggle('sidebar-collapsed');
-        });
-      }
 
-      var userBtn = document.getElementById('btnUser');
-      var userMenu = document.getElementById('userMenu');
-      function closeUserMenu(){ if(userMenu) userMenu.classList.remove('open'); }
-      if(userBtn && userMenu){
-        userBtn.addEventListener('click', function(e){
-          e.stopPropagation();
-          userMenu.classList.toggle('open');
-        });
-        document.addEventListener('click', function(){ closeUserMenu(); });
-        document.addEventListener('keydown', function(ev){ if(ev.key === 'Escape') closeUserMenu(); });
-        userMenu.addEventListener('click', function(e){ e.stopPropagation(); });
-      }
-    })();
-  </script>
+    {% include 'partials/footer.html' %}
+  </div>
+
 </body>
 </html>
