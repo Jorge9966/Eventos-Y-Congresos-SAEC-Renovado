@@ -79,9 +79,9 @@ WSGI_APPLICATION = 'congresos_example.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'db_congreso',       # nombre de tu base de datos
-        'USER': 'root',  # tu usuario de MySQL
-        'PASSWORD': 'root',   # tu contraseña de MySQL
+        'NAME': 'saec',       # nombre de tu base de datos
+        'USER': 'saec',  # tu usuario de MySQL
+        'PASSWORD': 'AdminSistemas123',   # tu contraseña de MySQL
         'HOST': 'localhost',         # o la IP del servidor MySQL
         'PORT': '3306',              # puerto por defecto de MySQL
         # Opciones para forzar charset/collation compatibles en versiones < MySQL 8
