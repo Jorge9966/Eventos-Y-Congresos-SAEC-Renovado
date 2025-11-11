@@ -1,0 +1,21 @@
+{% comment %} Footer específico para vistas de participantes {% endcomment %}
+<style>
+  /* Un poco más grisáceo y texto más pequeño y translúcido */
+  .participant-footer{
+    background:#2c2622; /* tono café-gris menos vivo */
+    color:rgba(241,245,249,.7); /* un poco más translúcido */
+    text-align:center;
+    padding:16px 12px;
+    margin:0;
+    margin-top:auto; /* empuja el footer al fondo en el layout flex del body */
+    font-size:.88rem; /* más pequeño */
+    font-weight:500;  /* un poco menos grueso */
+    letter-spacing:.2px;
+  }
+  @media (max-width:640px){
+    .participant-footer{font-size:.80rem;padding:14px 8px;}
+  }
+</style>
+<footer class="participant-footer" role="contentinfo">
+  Sistema de Administración de Eventos y Congresos
+</footer>

@@ -1,0 +1,95 @@
+{% load static %}
+<!-- Sidebar para Instructor con misma estética que el área de congreso (única fuente en partials) -->
+<style>
+/* Estilos coherentes con área general */
+.sidebar{ width:260px; flex:0 0 260px; background:#fff; color:#0f172a; display:flex; flex-direction:column; padding:22px 20px; border-right:1px solid #e6ebf2; position:sticky; top:0; height:100vh; overflow-y:auto; transition: flex-basis .28s ease, width .28s ease, padding .28s ease, border-right .28s ease; }
+.sidebar-top{ display:flex; align-items:center; justify-content:space-between; padding:4px 2px 14px 2px; }
+.sidebar-divider{ height:1px; background:#e9eef5; margin:0 -20px 14px; box-shadow:0 1px 0 rgba(15,23,42,0.03); }
+.sidebar .section{ margin-top:14px; font-size:0.78rem; color:#94a3b8; letter-spacing:.06em; text-transform:uppercase; }
+.sidebar a.nav-item, .sidebar .nav-item{ display:flex; align-items:center; gap:10px; padding:10px 10px; color:#334155; text-decoration:none; border-radius:10px; transition: background .12s ease, color .12s ease, box-shadow .12s ease; cursor:pointer; }
+.sidebar a.nav-item .bi, .sidebar .nav-item .bi{ font-size:1.05rem; color:#64748b; }
+.sidebar a.nav-item:hover, .sidebar .nav-item:hover{ color:#0b5ed7; background:#eef5ff; box-shadow: inset 0 2px 8px rgba(37,99,235,0.12), 0 1px 6px rgba(37,99,235,0.08); }
+.sidebar a.nav-item:hover .bi{ color:#0b5ed7; }
+.sidebar a.nav-item.active{ background:#eaf2ff; color:#2563eb; font-weight:600; }
+.sidebar a.nav-item.active .bi{ color:#2563eb; }
+.submenu{ margin-left:12px; padding-left:12px; border-left:1px solid #e6ebf2; max-height:0; overflow:hidden; opacity:0; transition: max-height .28s ease, opacity .20s ease; display:flex; flex-direction:column; }
+.submenu.open{ max-height:600px; opacity:1; }
+.submenu .nav-item{ transition: transform .18s ease, opacity .18s ease; transform: translateY(-4px); opacity:0; }
+.submenu.open .nav-item{ transform: translateY(0); opacity:1; }
+.link-toggle{ display:flex; align-items:center; justify-content:space-between; cursor:pointer; }
+.link-toggle .chev{ margin-left:auto; color:#94a3b8; transition: transform .18s ease; }
+.link-toggle.open .chev{ transform: rotate(90deg); }
+body.sidebar-collapsed .sidebar{ flex-basis:0; width:0; min-width:0; padding:0; border-right:none; overflow:hidden; }
+/* Off-canvas en móvil: el sidebar se desliza */
+@media (max-width: 992px){
+	.sidebar{ position:fixed; left:0; top:0; bottom:0; height:auto; transform:translateX(0); box-shadow:0 0 0 1px #e6ebf2, 0 18px 44px rgba(15,23,42,0.30); z-index:960; }
+	body.sidebar-collapsed .sidebar{ transform:translateX(-100%); }
+}
+</style>
+<div class="sidebar">
+	<div class="sidebar-top" style="padding:4px 2px 4px 2px; margin:-14px 0 0 -12px;">
+		<a class="brand" href="{% url 'inicio_instructor' %}"><img src="{% static 'base/img/SAEC.png' %}?v=2" alt="SAEC" style="height:64px; width:auto; display:block;" /></a>
+	</div>
+		<div class="sidebar-divider"></div>
+
+		<div class="section" style="margin-top:4px;">ADMINISTRAR</div>
+	<a class="nav-item {% if request.resolver_match.view_name == 'inicio_instructor' %}active{% endif %}" href="{% url 'inicio_instructor' %}"><i class="bi bi-house"></i> <span>Inicio</span></a>
+
+	{% with url_name=request.resolver_match.url_name %}
+	<div class="nav-item link-toggle {% if url_name in 'ins_talleres,ins_concursos,ins_conferencias' %}open{% endif %}" data-target="#sb-ins-congreso">
+		<i class="bi bi-folder"></i> <span>Congreso</span> <i class="bi bi-chevron-right chev"></i>
+	</div>
+	<div id="sb-ins-congreso" class="submenu {% if url_name in 'ins_talleres,ins_concursos,ins_conferencias' %}open{% endif %}">
+		<a class="nav-item {% if url_name == 'ins_talleres' %}active{% endif %}" href="{% url 'ins_talleres' %}">Talleres</a>
+		<a class="nav-item {% if url_name == 'ins_concursos' %}active{% endif %}" href="{% url 'ins_concursos' %}">Concursos</a>
+		<a class="nav-item {% if url_name == 'ins_conferencias' %}active{% endif %}" href="{% url 'ins_conferencias' %}">Conferencias</a>
+	</div>
+
+	<a class="nav-item {% if request.resolver_match.view_name == 'instructor_participantes' %}active{% endif %}" href="{% url 'instructor_participantes' %}"><i class="bi bi-people"></i> <span>Participantes</span></a>
+
+	<div class="section">PERFIL</div>
+	<a class="nav-item {% if request.resolver_match.view_name == 'instructor_perfil' %}active{% endif %}" href="{% url 'instructor_perfil' %}"><i class="bi bi-person"></i> <span>Perfil</span></a>
+	<a class="nav-item" href="{% url 'logout' %}"><i class="bi bi-box-arrow-right"></i> <span>Salir</span></a>
+
+	<div style="margin-top:auto; font-size:0.8rem; color:#aaa;">Logeado como: {{ request.user.username }}<br>Sistema de Administración de Congresos</div>
+	{% endwith %}
+</div>
+
+<script>
+(function(){
+	var toggles = document.querySelectorAll('.link-toggle');
+	function applyState(el, open){
+		var target = document.querySelector(el.getAttribute('data-target'));
+		if(!target) return;
+		target.classList.toggle('open', !!open);
+		el.classList.toggle('open', !!open);
+		try{ localStorage.setItem('ins-sb:'+ (target.id||''), open ? 'open':'closed'); }catch(e){}
+	}
+	function closeOthers(except){
+		toggles.forEach(function(other){
+			if(other === except) return;
+			var t = document.querySelector(other.getAttribute('data-target'));
+			if(!t) return;
+			if(t.classList.contains('open')){
+				t.classList.remove('open');
+				other.classList.remove('open');
+				try{ localStorage.setItem('ins-sb:'+ (t.id||''), 'closed'); }catch(e){}
+			}
+		});
+	}
+	toggles.forEach(function(el){
+		var target = document.querySelector(el.getAttribute('data-target'));
+		if(!target) return;
+		var stored = null;
+		try{ stored = localStorage.getItem('ins-sb:'+ (target.id||'')); }catch(e){}
+		var hasActive = !!target.querySelector('.nav-item.active');
+		var shouldOpen = (stored === 'open') || (stored === null && (hasActive || el.classList.contains('open') || target.classList.contains('open')));
+		applyState(el, shouldOpen);
+		el.addEventListener('click', function(){
+			var willOpen = !target.classList.contains('open');
+			if(willOpen) closeOthers(el);
+			applyState(el, willOpen);
+		});
+	});
+})();
+</script>

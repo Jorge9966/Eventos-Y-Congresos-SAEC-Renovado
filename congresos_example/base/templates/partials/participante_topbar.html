@@ -1,0 +1,33 @@
+{% comment %} Topbar reutilizable para vistas de participantes (sin Encuesta ni Pagar) {% endcomment %}
+<nav class="nav-main">
+  {% if congreso and congreso.logo %}
+    <div class="nav-logo-wrap">
+      <a href="{% url 'inicio_participante' %}" class="nav-logo-link" aria-label="Inicio del participante">
+        <img src="{{ congreso.logo.url }}" alt="{{ congreso.name }}" class="nav-logo" />
+      </a>
+    </div>
+  {% endif %}
+  <a {% if approved %}href="{% url 'inicio_participante' %}"{% else %}class="disabled-nav" aria-disabled="true" tabindex="-1"{% endif %} aria-current="page">Inicio</a>
+  {% if congreso %}
+    <a {% if approved %}href="{{ talleres_url }}"{% else %}class="disabled-nav" aria-disabled="true" tabindex="-1"{% endif %}>Talleres</a>
+    <a {% if approved %}href="{{ concursos_url }}"{% else %}class="disabled-nav" aria-disabled="true" tabindex="-1"{% endif %}>Concursos</a>
+    <a {% if approved %}href="{{ conferencias_url }}"{% else %}class="disabled-nav" aria-disabled="true" tabindex="-1"{% endif %}>Conferencias</a>
+  {% endif %}
+  {# Avisos y Perfil ahora también bloqueados si la membresía no está aprobada #}
+  <a {% if approved %}href="{% url 'part_avisos' %}"{% else %}class="disabled-nav" aria-disabled="true" tabindex="-1"{% endif %}>Avisos</a>
+  <a {% if approved %}href="{% url 'part_perfil' %}"{% else %}class="disabled-nav" aria-disabled="true" tabindex="-1"{% endif %}>Perfil</a>
+  <a href="{% url 'logout' %}">Cerrar</a>
+</nav>
+<style>
+  /* Estilos base de la barra de navegación (mismos que en inicio_participante) */
+  /* Layout: hace que el footer se pegue al fondo cuando el contenido es corto */
+  body{ min-height:100vh; display:flex; flex-direction:column; }
+  .nav-main{ display:flex; gap:46px; justify-content:center; padding:22px 40px 4px; position:sticky; top:0; background:#f8fafc; z-index:20; }
+  .nav-main a{ text-decoration:none; font-weight:600; color:#1e293b; position:relative; padding:6px 2px 14px; font-size:0.95rem; }
+  .nav-main a::after{ content:""; position:absolute; left:0; right:0; bottom:4px; height:3px; background:#f59e0b; opacity:.8; border-radius:3px; }
+  /* Posiciona el logo en la esquina izquierda sin afectar el centrado de los enlaces */
+  .nav-logo-wrap{ position:absolute; left:20px; top:50%; transform:translateY(-50%); }
+  .nav-logo{ height:42px; width:auto; object-fit:contain; border-radius:4px; box-shadow:0 1px 2px rgba(0,0,0,.08); }
+  .nav-logo-link{ display:inline-block; }
+  .disabled-nav{ pointer-events:none; opacity:.45; text-decoration:none; }
+</style>

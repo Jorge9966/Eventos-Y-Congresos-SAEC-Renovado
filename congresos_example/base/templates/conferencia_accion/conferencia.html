@@ -50,6 +50,10 @@
           <input class="form-control" type="text" name="lugar" placeholder="Lugar de la conferencia" />
         </div>
         <div class="mb-3">
+          <label class="form-label">Cupo máximo</label>
+          <input class="form-control" type="number" min="0" name="cupo" placeholder="Ej. 100" />
+        </div>
+        <div class="mb-3">
           <label class="form-label">Instructor</label>
           <select class="form-select" name="instructor_id">
             <option value="">-- Selecciona --</option>
@@ -70,11 +74,16 @@
     </div>
     {% include 'partials/footer.html' %}
   </div>
-  <script src="https://cdn.ckeditor.com/4.22.1/standard-all/ckeditor.js"></script>
+  {% include 'partials/ckeditor_full_toolbar.html' %}
   <script>
-    if (window.CKEDITOR) {
-      CKEDITOR.replace('descripcion', {height: 260});
+    function initDescripcionConferenciaAccion(){
+      const el = document.getElementById('descripcion');
+      if(!el) return;
+      if(typeof initInstructorEditor === 'function'){ initInstructorEditor('descripcion'); return; }
+      if(window.CKEDITOR){ CKEDITOR.replace('descripcion',{height:320}); return; }
+      setTimeout(initDescripcionConferenciaAccion,150);
     }
+    document.addEventListener('DOMContentLoaded', initDescripcionConferenciaAccion);
   </script>
 </body>
 </html>

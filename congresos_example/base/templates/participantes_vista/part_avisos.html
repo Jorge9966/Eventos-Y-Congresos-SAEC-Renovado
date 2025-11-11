@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Avisos - Participante</title>
+  {% load static extra_filters %}
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:'Inter',Arial,Helvetica,sans-serif;background:#f8fafc;}
+    .page-wrap{max-width:1000px;margin:40px auto 80px;padding:0 40px;}
+    h1.page-title{font-size:2rem;font-weight:800;margin:0 0 10px;color:#0b5ed7;letter-spacing:.5px;}
+    .divider{width:110px;height:4px;background:#0b5ed7;border-radius:6px;margin:18px 0 30px;}
+    .warning-box{background:#f1f5f9;border:1px solid #e2e8f0;color:#475569;padding:16px 20px;border-radius:8px;font-size:.92rem;font-weight:500;}
+    .aviso{background:#ffffff;border:1px solid #cbd5e1;border-radius:10px;padding:16px 18px;margin-bottom:14px;}
+    .aviso h2{font-size:1.05rem;margin:0 0 6px;font-weight:600;color:#0b1730;}
+    .aviso .fecha{font-size:.7rem;text-transform:uppercase;letter-spacing:.5px;color:#64748b;margin-bottom:8px;}
+  </style>
+</head>
+<body>
+  {% include 'partials/participante_topbar.html' %}
+  <div class="page-wrap">
+    <h1 class="page-title">Avisos</h1>
+    <div class="divider" aria-hidden="true"></div>
+    {% if not approved %}
+      <div class="warning-box">Tu membresía aún no está aprobada o fue rechazada. No puedes acceder a los avisos.</div>
+    {% else %}
+      <!-- Placeholder de avisos -->
+      <div class="aviso">
+        <div class="fecha">01 NOV 2025</div>
+        <h2>Bienvenido al congreso</h2>
+        <p>Este es un aviso de ejemplo. Aquí aparecerán comunicados importantes para los participantes.</p>
+      </div>
+      <div class="aviso">
+        <div class="fecha">05 NOV 2025</div>
+        <h2>Actualización de cronograma</h2>
+        <p>Información preliminar sobre horarios y ubicación de actividades. (Contenido a implementar).</p>
+      </div>
+    {% endif %}
+  </div>
+  {% include 'partials/footer_participante.html' %}
+</body>
+</html>

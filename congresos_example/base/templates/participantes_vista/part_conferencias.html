@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Conferencias - Participante</title>
+  {% load static extra_filters %}
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:'Inter',Arial,Helvetica,sans-serif;background:#f8fafc;}
+  .hero-cover{background:url('{% static "base/img/bloggrid-heading-bg.jpg" %}') center/cover no-repeat; min-height:220px; display:flex; align-items:center; justify-content:center;}
+  .hero-cover h1{color:#fff;font-size:2.4rem;font-weight:800;letter-spacing:.6px;margin:36px 0;text-shadow:0 2px 8px rgba(0,0,0,.35);} 
+  .page-wrap{max-width:1200px;margin:30px auto 60px;padding:0 40px;}
+  .cards-wrap{ margin-top:22px; }
+    .work-card{ background:#fff; border:1px solid #e6ebf2; border-radius:12px; box-shadow:0 10px 24px rgba(15,23,42,0.06); padding:16px; height:100%; transition:transform .2s ease, box-shadow .2s ease; }
+  .work-card:hover{ transform:translateY(-4px); box-shadow:0 16px 36px rgba(15,23,42,0.12); }
+  .work-card:hover .work-title{ color:#f97316; }
+    .work-thumb{ width:100%; height:200px; object-fit:contain; background:#fff; border-radius:10px; display:block; }
+    .work-title{ font-weight:800; font-size:1.25rem; color:#0b1730; line-height:1.25; margin:12px 0; }
+    .work-meta{ color:#475569; font-size:.95rem; }
+    .desc-line{ margin-top:8px; color:#ffffff; font-size:.9rem; line-height:1.25; display:inline-block; background:#0b1730; border:1px solid #0b1730; border-radius:999px; padding:6px 12px; box-shadow: 0 1px 3px rgba(15,23,42,0.12); }
+    .work-divider{ height:1px; background:#eef2f7; margin:12px 0; }
+    .stat{ color:#64748b; font-size:.9rem; }
+    .status-badge{ background:#22c55e; color:#fff; border-radius:24px; padding:4px 12px; font-weight:600; font-size:.85rem; }
+  .icon-enroll{ display:inline-flex; align-items:center; justify-content:center; width:44px; height:40px; border-radius:10px; background:#f59e0b; color:#fff; border:1px solid #f59e0b; box-shadow:0 2px 4px rgba(0,0,0,.12); font-size:1.1rem; }
+  .icon-enroll:hover{ background:#d97706; border-color:#d97706; color:#fff; }
+  .icon-enroll.disabled{ pointer-events:none; opacity:.5; }
+  .warning-box{background:#fff3cd;border:1px solid #fcd34d;color:#7c5a00;padding:12px 14px;border-radius:8px;font-size:.92rem;font-weight:500;margin-bottom:16px;}
+  </style>
+</head>
+<body>
+  {% include 'partials/participante_topbar.html' %}
+  <header class="hero-cover">
+    <h1>CONFERENCIAS</h1>
+  </header>
+  <main class="page-wrap">
+    {% if not approved %}
+      <div class="warning-box">Tu membresía aún no está aprobada o fue rechazada. Puedes explorar el catálogo, pero no podrás inscribirte.</div>
+    {% endif %}
+    <div class="container-fluid px-0 cards-wrap">
+      <div class="row g-4">
+        {% for f in conferencias %}
+          <div class="col-12 col-md-6 col-xl-4">
+            <article class="work-card">
+              {% if f.image %}
+                <img class="work-thumb" src="{{ f.image.url }}" alt="{{ f.title }}">
+              {% else %}
+                <div class="work-thumb"></div>
+              {% endif %}
+              <h2 class="work-title">{{ f.title }}</h2>
+              <div class="work-meta">
+                <div><strong>Ponente:</strong> {% if f.instructor %}{{ f.instructor.get_full_name|default:f.instructor.username }}{% else %}—{% endif %}</div>
+                {% if f.lugar %}<div><strong>Lugar:</strong> {{ f.lugar }}</div>{% endif %}
+                {% if f.description %}<div class="desc-line">{{ f.description|first_line }}</div>{% endif %}
+              </div>
+              <div class="work-divider"></div>
+              <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <div class="stat">
+                  {% if f.cupo_maximo %}
+                    {{ f.inscritos_count|default:0 }} participantes de {{ f.cupo_maximo }}
+                  {% else %}
+                    {{ f.inscritos_count|default:0 }} participantes
+                  {% endif %}
+                </div>
+                <span class="status-badge">Disponible</span>
+              </div>
+              <div class="mt-2">
+                <a class="icon-enroll {% if not approved %}disabled{% endif %}" {% if approved %}href="{% url 'part_conferencia_inscribir' f.id %}"{% else %}tabindex="-1" aria-disabled="true"{% endif %} aria-label="Ver e inscribirme" title="Ver e inscribirme">
+                  <i class="bi bi-box-arrow-in-right"></i>
+                </a>
+              </div>
+            </article>
+          </div>
+        {% empty %}
+          <div class="col-12"><div class="warning-box">Aún no hay conferencias publicadas para este congreso.</div></div>
+        {% endfor %}
+      </div>
+    </div>
+  </main>
+  {% include 'partials/footer_participante.html' %}
+</body>
+</html>

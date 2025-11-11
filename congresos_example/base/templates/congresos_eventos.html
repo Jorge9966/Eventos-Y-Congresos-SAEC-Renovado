@@ -8,6 +8,7 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+  {% load static extra_filters %}
   <style>
     /* Layout base - igual que inicio */
   body { margin:0; display:flex; height:100vh; font-family:'Inter', Arial, Helvetica, sans-serif; background:#f3f6fb; overflow:hidden; }
@@ -115,6 +116,13 @@
     .icon-yellow{ background:#f59e0b; }
     .icon-red{ background:#ef4444; }
     .icon-btn-sm:hover{ filter:brightness(1.05); transform: translateY(-1px); box-shadow: 0 6px 14px rgba(15,23,42,0.08); }
+
+    /* Primera línea de descripción como "pill" azul marino */
+    .card-desc-line{
+      margin-top:8px; color:#ffffff; font-size:.9rem; line-height:1.25; white-space:normal;
+      display:inline-block; background:#0b1730; border:1px solid #0b1730; border-radius:999px;
+      padding:6px 12px; box-shadow:0 1px 3px rgba(15,23,42,0.12);
+    }
   </style>
 </head>
 <body>
@@ -154,10 +162,15 @@
             <div class="card-body">
               <div class="card-title">{{ cg.name|upper }}</div>
               <div class="card-sub">
-                {% if cg.admin_user %}
-                  Administrador: {% if cg.admin_user.first_name %}{{ cg.admin_user.first_name }}{% else %}{{ cg.admin_user.username }}{% endif %}
-                {% else %}
-                  <span style="opacity:.7;">Sin administrador</span>
+                <div class="card-admin">
+                  {% if cg.admin_user %}
+                    Administrador: {% if cg.admin_user.first_name %}{{ cg.admin_user.first_name }}{% else %}{{ cg.admin_user.username }}{% endif %}
+                  {% else %}
+                    <span style="opacity:.7;">Sin administrador</span>
+                  {% endif %}
+                </div>
+                {% if cg.description %}
+                  <div class="card-desc-line">{{ cg.description|first_line }}</div>
                 {% endif %}
               </div>
             </div>

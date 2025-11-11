@@ -156,29 +156,16 @@
     {% include 'partials/footer.html' %}
   </div>
 
+  {% include 'partials/ckeditor_full_toolbar.html' %}
   <script>
-    // CKEditor para descripción
-  </script>
-  <script src="https://cdn.ckeditor.com/4.22.1/standard-all/ckeditor.js"></script>
-  <script>
-    if (window.CKEDITOR) {
-      CKEDITOR.replace('descripcion', {
-        language: 'es',
-        removePlugins: 'elementspath',
-        resize_enabled: false,
-        height: 260,
-        toolbar: [
-          { name: 'clipboard', items: ['Undo', 'Redo'] },
-          { name: 'styles', items: ['Font', 'FontSize'] },
-          { name: 'basicstyles', items: ['Bold', 'Italic', 'Underline', 'Strike', '-', 'RemoveFormat'] },
-          { name: 'paragraph', items: ['NumberedList', 'BulletedList', '-', 'Outdent', 'Indent', '-', 'JustifyLeft','JustifyCenter','JustifyRight'] },
-          { name: 'links', items: ['Link', 'Unlink'] },
-          { name: 'insert', items: ['Table'] },
-          { name: 'colors', items: ['TextColor', 'BGColor'] },
-          { name: 'tools', items: ['Maximize'] }
-        ]
-      });
+    function initDescripcionEditarCongreso(){
+      const el = document.getElementById('descripcion');
+      if(!el) return;
+      if(typeof initInstructorEditor === 'function'){ initInstructorEditor('descripcion'); return; }
+      if(window.CKEDITOR){ CKEDITOR.replace('descripcion',{height:320}); return; }
+      setTimeout(initDescripcionEditarCongreso,150);
     }
+    document.addEventListener('DOMContentLoaded', initDescripcionEditarCongreso);
     // Burger y menú de usuario
     (function(){
       var btn = document.getElementById('btnBurger');

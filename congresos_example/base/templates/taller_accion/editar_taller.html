@@ -74,9 +74,14 @@
   .page-header-card{ background:#fff; border:1px solid #e6ebf2; border-radius:12px; box-shadow:0 10px 28px rgba(15,23,42,0.06); padding:22px 24px; margin-bottom:16px; }
   .page-title{ margin:0; font-size:1.8rem; font-weight:700; color:#0b1730; }
 </style>
-<script src="https://cdn.ckeditor.com/4.22.1/standard-all/ckeditor.js"></script>
+{% include 'partials/ckeditor_full_toolbar.html' %}
 <script>
-  if (window.CKEDITOR) {
-    CKEDITOR.replace('descripcion', {height: 260});
+  function initDescripcionEditarTaller(){
+    const el = document.getElementById('descripcion');
+    if(!el) return;
+    if(typeof initInstructorEditor === 'function'){ initInstructorEditor('descripcion'); return; }
+    if(window.CKEDITOR){ CKEDITOR.replace('descripcion',{height:320}); return; }
+    setTimeout(initDescripcionEditarTaller,150);
   }
+  document.addEventListener('DOMContentLoaded', initDescripcionEditarTaller);
 </script>

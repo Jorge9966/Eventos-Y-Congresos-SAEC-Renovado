@@ -1,0 +1,305 @@
+{% load static %}
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Mi Conferencia - Instructor</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  {% include '_congreso_base_styles.html' %}
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@300;400;500;600&family=Playfair+Display:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'base/css/instructor.css' %}">
+  <script>
+    // Inicialización robusta para asegurar carga de CKEditor aunque el script CDN llegue después
+    function initDescripcionConferencia(){
+      const areas = Array.from(document.querySelectorAll('textarea#descripcion, textarea[name="descripcion"]'));
+      if(!areas.length) return; // no hay campo en modo vista
+      let applied = false;
+      areas.forEach(el => {
+        if(el.dataset.ckeditorInitialized === '1') return;
+        const id = el.id || 'descripcion';
+        if(typeof initInstructorEditor === 'function' && id){
+          if(!(window.CKEDITOR && CKEDITOR.instances && CKEDITOR.instances[id])){
+            initInstructorEditor(id);
+            el.dataset.ckeditorInitialized = '1';
+            applied = true;
+          }
+        } else if(window.CKEDITOR && id){
+          if(!(CKEDITOR.instances && CKEDITOR.instances[id])){
+            CKEDITOR.replace(id,{height:320});
+            el.dataset.ckeditorInitialized = '1';
+            applied = true;
+          }
+        }
+      });
+      if(!applied && !(window.CKEDITOR || typeof initInstructorEditor === 'function')){
+        setTimeout(initDescripcionConferencia,150);
+      }
+    }
+    document.addEventListener('DOMContentLoaded', function(){
+      initDescripcionConferencia();
+      // Toggle Conferencia (reaplica editor cuando se vuelve a información)
+      const bInfo = document.getElementById('btn-info-conferencia');
+      const bAlu = document.getElementById('btn-alumnos-conferencia');
+      const info = document.getElementById('conferencia-info');
+      const alumnos = document.getElementById('conferencia-alumnos');
+      if(bInfo && bAlu && info && alumnos){
+        bInfo.addEventListener('click', () => {
+          bInfo.classList.add('active'); bAlu.classList.remove('active');
+          info.style.display='block'; alumnos.style.display='none';
+          initDescripcionConferencia();
+        });
+        bAlu.addEventListener('click', () => {
+          bAlu.classList.add('active'); bInfo.classList.remove('active');
+          info.style.display='none'; alumnos.style.display='block';
+        });
+      }
+    });
+  </script>
+</head>
+<body>
+  {% include 'partials/instructor_sidebar.html' %}
+  <div class="main">
+    {% include 'partials/instructor_topbar.html' %}
+
+    {% if conferencia and not creation_mode %}
+  <div class="container-fluid px-0">
+    <section class="hero-banner">
+      <div class="hero-row">
+        <div class="hero-left">
+          <h1 class="page-title">Mi Conferencia</h1>
+          <div class="hero-sub"><i class="bi bi-eye"></i> Vista previa</div>
+        </div>
+        <div class="hero-right">
+          <div class="action-grid">
+            {# Botón verde Agregar eliminado: se usa el botón dentro de la barra switcher #}
+            <a href="{% url 'ins_conferencia_editar' %}" class="btn btn-primary hero-btn-icon" title="Editar conferencia" aria-label="Editar conferencia"><i class="bi bi-pencil-square"></i></a>
+            {% if request.user.is_superuser or request.user.id == congreso.admin_user_id or request.user.id == conferencia.instructor_id %}
+            <form method="post" action="{% url 'ins_conferencias' %}" onsubmit="return confirm('¿Eliminar esta conferencia? Esta acción no se puede deshacer.');" style="margin:0; display:inline-block;">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="delete_conferencia" />
+              <input type="hidden" name="conferencia_id" value="{{ conferencia.id }}" />
+              <button type="submit" class="btn btn-danger hero-btn-icon" title="Eliminar conferencia" aria-label="Eliminar conferencia"><i class="bi bi-trash"></i></button>
+            </form>
+            {% else %}
+              <span style="width:56px; height:56px; display:inline-block;"></span>
+            {% endif %}
+            <a href="{% url 'ins_conferencia_participantes' %}" class="btn btn-light hero-btn-icon" title="Ver lista" aria-label="Ver lista"><i class="bi bi-list-ul"></i></a>
+          </div>
+        </div>
+      </div>
+    </section>
+  <div class="resource-switcher" style="margin-left:-40px;margin-right:-40px;width:calc(100% + 80px);">
+    <div class="rs-list">
+      {% if conferencias %}
+        {% for c in conferencias %}
+          <a href="{% url 'ins_conferencias' %}?id={{ c.id }}" class="rs-item {% if conferencia and c.id == conferencia.id %}active{% endif %}">{{ c.title|truncatechars:32 }}</a>
+        {% endfor %}
+      {% else %}
+        <span class="rs-empty-hint">Aún no has creado conferencias.</span>
+      {% endif %}
+    </div>
+  <a href="{% url 'ins_conferencias' %}?nuevo=1" class="rs-add-btn"><i class="bi bi-plus-circle"></i> Agregar Conferencia</a>
+  </div>
+  <!-- Toggle removed: unified appearance across pages -->
+  <div class="px-1 pt-3 pb-4 mt-2">
+    <div class="content-wrapper">
+      <div class="title-block mt-2">
+            <div class="title-inline">
+              <h1 class="page-title mb-2 m-0"><span class="title-text">{{ conferencia.title }}</span></h1>
+                {% if conferencia_capacidad %}
+                {% if conferencia_inscritos < conferencia_capacidad %}
+                  <span class="status-badge" style="background:#22c55e; color:#fff;">Disponible</span>
+                {% else %}
+                  <span class="status-badge" style="background:#ef4444; color:#fff;">Agotado</span>
+                {% endif %}
+              {% else %}
+                <span class="status-badge" style="background:#22c55e; color:#fff;">Disponible</span>
+              {% endif %}
+            </div>
+          {% if conferencia.image %}
+            <img src="{{ conferencia.image.url }}" class="taller-image mb-4 mt-4" alt="{{ conferencia.title }}" />
+          {% endif %}
+          <div class="meta-row mb-4">
+            <div class="meta-item">
+              <span class="meta-label">Instructor:</span>
+              <span class="meta-value">{{ conferencia.instructor.get_full_name|default:conferencia.instructor.username }}</span>
+            </div>
+            {% if conferencia.lugar %}
+            <div class="meta-item">
+              <span class="meta-label">Área</span>
+              <span class="meta-value">{{ conferencia.lugar }}</span>
+            </div>
+            {% endif %}
+            {% if conferencia.cupo_maximo %}
+            <div class="meta-item">
+              <span class="meta-label">Cupo máximo</span>
+              <span class="meta-value">{{ conferencia.cupo_maximo }}</span>
+            </div>
+            {% endif %}
+          </div>
+          <div class="desc-offset-left">
+            <div class="mb-3">
+              <div class="tabs-row">
+                <div class="btn-group" role="group">
+                  <button type="button" class="btn btn-tabs active" id="btn-info-conferencia"><i class="bi bi-journal-bookmark-fill"></i> Información</button>
+                  <button type="button" class="btn btn-tabs" id="btn-alumnos-conferencia"><i class="bi bi-people-fill"></i> Participantes</button>
+                </div>
+              </div>
+            </div>
+            <div id="conferencia-info" class="description-body">
+              {{ conferencia.description|safe }}
+            </div>
+            <div id="conferencia-alumnos" class="description-body" style="display:none;">
+            <div class="participants-strip{% if not conferencia.inscripciones.count %} empty{% endif %}">
+              <div class="ps-title"><span class="ps-dash">–</span> Alumnos inscritos a esta conferencia</div>
+              <div class="ps-count">{{ conferencia.inscripciones.count }}{% if conferencia.cupo_maximo %} / {{ conferencia.cupo_maximo }}{% endif %}</div>
+            </div>
+            {% if conferencia.inscripciones.all %}
+              <ul class="list-group">
+                {% for ins in conferencia.inscripciones.all %}
+                  <li class="list-group-item">{{ ins.user.get_full_name|default:ins.user.username }}</li>
+                {% endfor %}
+              </ul>
+            {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    {% elif creation_mode %}
+      <div class="container-fluid px-0">
+        <section class="hero-banner"><h1 class="page-title">Agregar Conferencia</h1></section>
+        <form class="form-card mt-2" method="post" enctype="multipart/form-data">
+          {% csrf_token %}
+              <input type="hidden" name="action" value="create_conferencia" />
+          {% if messages %}
+            {% for m in messages %}
+              <div class="alert alert-{% if 'error' in m.tags %}danger{% else %}{{ m.tags }}{% endif %}">{{ m }}</div>
+            {% endfor %}
+          {% endif %}
+
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label" for="image">Imagen (3MB Máximo)</label>
+              <input type="file" id="image" name="image" accept="image/*" />
+              <div class="form-hint">Opcional. Tamaño máximo 3MB.</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Nombre de la Conferencia</label>
+              <input class="form-control" type="text" name="title" placeholder="Título" required maxlength="200" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Lugar</label>
+              <input class="form-control" type="text" name="lugar" placeholder="Lugar de la conferencia" maxlength="200" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Cupo máximo</label>
+              <input class="form-control" type="number" name="cupo" min="0" placeholder="Ej. 100" />
+            </div>
+            <div class="col-12">
+              <label class="form-label">Descripción</label>
+              <textarea class="form-control" name="descripcion" id="descripcion" rows="8"></textarea>
+              <div class="form-hint">Comparte detalles, objetivos, agenda, etc.</div>
+            </div>
+          </div>
+          <div class="d-flex gap-2 mt-3">
+            <button class="btn btn-primary" type="submit">Guardar Conferencia</button>
+          </div>
+        </form>
+      </div>
+{% else %}
+  <div class="container-fluid px-0">
+    <section class="hero-banner"><h1 class="page-title">Agregar Conferencia</h1></section>
+    <form class="form-card mt-2" method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="create_conferencia" />
+      {% if messages %}
+        {% for m in messages %}
+          <div class="alert alert-{% if 'error' in m.tags %}danger{% else %}{{ m.tags }}{% endif %}">{{ m }}</div>
+        {% endfor %}
+      {% endif %}
+      <div class="row g-3">
+        <div class="col-12">
+          <label class="form-label" for="image">Imagen (3MB Máximo)</label>
+          <input type="file" id="image" name="image" accept="image/*" />
+          <div class="form-hint">Opcional. Tamaño máximo 3MB.</div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Nombre de la Conferencia</label>
+          <input class="form-control" type="text" name="title" placeholder="Título" required maxlength="200" />
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Lugar</label>
+          <input class="form-control" type="text" name="lugar" placeholder="Lugar de la conferencia" maxlength="200" />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Cupo máximo</label>
+          <input class="form-control" type="number" name="cupo" min="0" placeholder="Ej. 100" />
+        </div>
+        <div class="col-12">
+          <label class="form-label">Descripción</label>
+          <textarea class="form-control" name="descripcion" id="descripcion" rows="8"></textarea>
+          <div class="form-hint">Comparte detalles, objetivos, agenda, etc.</div>
+        </div>
+      </div>
+      <div class="d-flex gap-2 mt-3">
+        <button class="btn btn-primary" type="submit">Guardar Conferencia</button>
+      </div>
+    </form>
+  </div>
+{% endif %}
+
+    {% include 'partials/footer.html' %}
+  </div>
+  <script>
+    // Dynamic tabs indicator (same behavior as ins_taller)
+    (function(){
+      try {
+        const tabsRow = document.querySelector('.tabs-row');
+        if (!tabsRow) return;
+        const tabs = Array.from(tabsRow.querySelectorAll('.btn-tabs'));
+        if (!tabs.length) return;
+        const indicator = document.createElement('span');
+        indicator.className = 'tabs-indicator';
+        tabsRow.appendChild(indicator);
+        const ACTIVE_COLOR = '#374151';
+        const GLOW = '0 6px 14px rgba(55,65,81,0.08)';
+        function moveTo(button, opts={color:ACTIVE_COLOR, glow:false}){
+          const btnRect = button.getBoundingClientRect();
+          const rowRect = tabsRow.getBoundingClientRect();
+          const left = btnRect.left - rowRect.left + tabsRow.scrollLeft;
+          const width = btnRect.width;
+          indicator.style.position = 'absolute';
+          indicator.style.bottom = '-3px';
+          indicator.style.height = '3px';
+          indicator.style.left = left + 'px';
+          indicator.style.width = width + 'px';
+          indicator.style.background = opts.color || '#c9cdd1';
+          indicator.style.boxShadow = opts.glow ? GLOW : 'none';
+          indicator.style.borderRadius = '2px';
+          indicator.style.transition = 'left .22s cubic-bezier(.22,.9,.28,1), width .22s cubic-bezier(.22,.9,.28,1), background .18s ease, box-shadow .18s ease';
+        }
+        const initial = tabs.find(t => t.classList.contains('active')) || tabs[0];
+        setTimeout(()=> moveTo(initial, {color: ACTIVE_COLOR, glow:true}), 40);
+        tabs.forEach(tab => {
+          tab.addEventListener('mouseenter', ()=> moveTo(tab, {color: ACTIVE_COLOR, glow:true}));
+          tab.addEventListener('mouseleave', ()=>{
+            const current = tabs.find(t => t.classList.contains('active')) || initial;
+            moveTo(current, {color: ACTIVE_COLOR, glow:true});
+          });
+          tab.addEventListener('click', ()=>{
+            tabs.forEach(t=>t.classList.remove('active'));
+            tab.classList.add('active');
+            moveTo(tab, {color: ACTIVE_COLOR, glow:true});
+          });
+        });
+        window.addEventListener('resize', ()=>{
+          const current = tabs.find(t => t.classList.contains('active')) || initial;
+          moveTo(current, {color: ACTIVE_COLOR, glow:true});
+        });
+      } catch (err) { console.error('tabs indicator init error', err); }
+    })();
+  </script>
+  {% include 'partials/ckeditor_full_toolbar.html' %}
+</body>
+</html>

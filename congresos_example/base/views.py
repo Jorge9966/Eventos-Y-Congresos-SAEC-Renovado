@@ -15,8 +15,9 @@ import random
 import re
 from datetime import timedelta
 from django.utils import timezone
+from functools import wraps
 from django.utils.text import slugify
-from django.db.models import Q
+from django.db.models import Q, Count
 from .models import (
     PasswordResetCode,
     Congreso,
@@ -120,6 +121,28 @@ def _get_scoped_congreso_for_group_admin(user):
     return None
 
 # -------------------
+# Decoradores de acceso por rol
+# -------------------
+def instructors_area_only(view_func):
+    """Restringe el acceso a vistas del área de instructores.
+
+    Permite: superuser o usuarios en el grupo "Instructores".
+    Bloquea: grupo "Participantes" y cualquier otro usuario no instructor.
+    """
+    @wraps(view_func)
+    def _wrapped(request, *args, **kwargs):
+        user = request.user
+        if not getattr(user, "is_authenticated", False):
+            # Conservar comportamiento estándar de login_required
+            return redirect("login")
+        if user.is_superuser or user.groups.filter(name__in=["Instructores"]).exists():
+            return view_func(request, *args, **kwargs)
+        # Mensaje claro para participantes y otros roles
+        messages.error(request, "Esta sección es solo para instructores.")
+        return redirect("inicio")
+    return _wrapped
+
+# -------------------
 # GUARD: BLOQUEAR ROLES NO ADMIN EN VISTAS PROTEGIDAS
 # -------------------
 def _deny_non_admin_roles(request):
@@ -131,6 +154,22 @@ def _deny_non_admin_roles(request):
         if user.groups.filter(name__in=["Administrador", "Administradores_Congresos"]).exists():
             return None
         if user.groups.filter(name__in=["Instructores", "Participantes"]).exists():
+            # Permitir sus páginas de inicio específicas
+            allowed_paths = {
+                reverse("inicio_instructor"),
+                reverse("inicio_participante"),
+            }
+            # También permitir home público, login, registro y recuperación
+            allowed_names = {"home", "login", "register", "password_reset", "code_password"}
+            current_path = request.path
+            current_name = None
+            try:
+                # Resolver nombre de la ruta actual para comparar
+                current_name = request.resolver_match.view_name if request.resolver_match else None
+            except Exception:
+                current_name = None
+            if current_path in allowed_paths or current_name in allowed_names:
+                return None
             messages.error(request, "No tienes acceso a esta sección.")
             return redirect("login")
     return None
@@ -191,9 +230,56 @@ def login_view(request):
                     # Si no eligió congreso o coincide, iniciar sesión y enviar a su congreso
                     login(request, user)
                     return redirect("inicio_congreso", scoped.id)
-            # Usuario sin scope especial: login normal
+            # Lógica específica para Instructores: sólo permiten login si el congreso seleccionado está aprobado
+            if user.groups.filter(name="Instructores").exists():
+                approved_qs = UserCongresoMembership.objects.filter(user=user, role="instructor", status="approved")
+                # Si no tiene ningún congreso aprobado, negar el login (similar a scope estricto)
+                if not approved_qs.exists():
+                    messages.error(request, "Tu cuenta de instructor no tiene ningún congreso aprobado todavía.")
+                    return render(request, "login.html", {"selected_congreso": selected_congreso})
+                # Si viene congreso seleccionado, debe estar aprobado para ese congreso
+                chosen_id = None
+                if selected_congreso:
+                    if not approved_qs.filter(congreso=selected_congreso).exists():
+                        messages.error(request, f"Debes iniciar sesión en un congreso donde hayas sido aceptado.")
+                        return render(request, "login.html", {"selected_congreso": selected_congreso})
+                    chosen_id = selected_congreso.id
+                else:
+                    # Si no eligió, usar el más reciente aprobado
+                    chosen = approved_qs.order_by("-decided_at", "-id").first()
+                    chosen_id = chosen.congreso_id if chosen else None
+
+                # Ahora sí iniciar sesión y fijar congreso activo
+                login(request, user)
+                if chosen_id:
+                    request.session["instructor_active_congreso_id"] = chosen_id
+                return redirect("inicio_instructor")
+
+            # Participantes: permitir login aunque aún no tengan un congreso aprobado.
+            # Si hay aprobado, fijar congreso activo; si no, ir al inicio de participante con botones deshabilitados.
+            if user.groups.filter(name="Participantes").exists():
+                approved_qs = UserCongresoMembership.objects.filter(user=user, role="participante", status="approved")
+                chosen_id = None
+                if approved_qs.exists():
+                    # Determinar congreso activo (seleccionado aprobado o más reciente)
+                    if selected_congreso:
+                        if not approved_qs.filter(congreso=selected_congreso).exists():
+                            messages.error(request, "Debes iniciar sesión en un congreso donde hayas sido aceptado como participante.")
+                            return render(request, "login.html", {"selected_congreso": selected_congreso})
+                        chosen_id = selected_congreso.id
+                    else:
+                        chosen = approved_qs.order_by("-decided_at", "-id").first()
+                        chosen_id = chosen.congreso_id if chosen else None
+                # Login válido y (opcionalmente) fijar sesión
+                login(request, user)
+                if chosen_id:
+                    request.session["participant_active_congreso_id"] = chosen_id
+                return redirect("inicio_participante")
+
+            # Resto de roles: login normal
             login(request, user)
-            return redirect("inicio")  # por defecto
+            return redirect("inicio")  # por defecto administradores
+            return redirect("inicio")  # por defecto administradores
         else:
             messages.error(request, "Usuario o contraseña incorrectos.")
         return render(request, "login.html", {"selected_congreso": selected_congreso})
@@ -578,6 +664,1002 @@ def inicio_view(request):
         rol = "Administrador"
 
     return render(request, "inicio.html", {"rol": rol, "is_scoped_admin": bool(_get_scoped_congreso_for_group_admin(request.user))})
+
+# -------------------
+# LANDINGS POR ROL (INSTRUCTOR / PARTICIPANTE)
+# -------------------
+@login_required
+@instructors_area_only
+def inicio_instructor_view(request):
+    # Solo instructores pueden acceder a esta vista
+    if not (request.user.is_superuser or request.user.groups.filter(name__in=["Instructores"]).exists()):
+        messages.error(request, "Esta página es solo para instructores.")
+        return redirect("inicio")
+    # Determinar el congreso activo desde sesión (si se fijó al iniciar sesión)
+    active_id = request.session.get("instructor_active_congreso_id")
+    membership = None
+    if active_id:
+        membership = UserCongresoMembership.objects.filter(
+            user=request.user, role="instructor", status="approved", congreso_id=active_id
+        ).first()
+    # Si no se encontró por sesión, tomar el más reciente aprobado
+    if not membership:
+        membership = (
+            UserCongresoMembership.objects
+            .filter(user=request.user, role="instructor", status="approved")
+            .order_by("-decided_at", "-id")
+            .first()
+        )
+        # Ajustar sesión si encontramos uno
+        if membership:
+            request.session["instructor_active_congreso_id"] = membership.congreso_id
+    # Si aún no hay membresía aprobada, redirigir a página de pendiente
+    if not membership:
+        return redirect("instructor_pendiente")
+    congreso = membership.congreso if membership else None
+    ctx = {"congreso": congreso}
+    return render(request, "instructores_vista/inicio_instructor.html", ctx)
+
+
+@login_required
+@instructors_area_only
+def instructor_pendiente_view(request):
+    """Página mostrada a instructores que aún no tienen una membresía aprobada.
+
+    Casos:
+    - Sin solicitudes: invitar a solicitar acceso a un congreso.
+    - Solicitudes pendientes: mostrar estado.
+    - Solicitudes rechazadas (sin aprobadas): informar.
+    Si eventualmente se aprueba una membresía, se redirige a la landing normal.
+    """
+    if not (request.user.is_superuser or request.user.groups.filter(name__in=["Instructores"]).exists()):
+        messages.error(request, "Esta página es solo para instructores.")
+        return redirect("inicio")
+    approved_exists = UserCongresoMembership.objects.filter(user=request.user, role="instructor", status="approved").exists()
+    if approved_exists:
+        # Si se aprobó durante la sesión, ir directo a inicio
+        return redirect("inicio_instructor")
+    pending_exists = UserCongresoMembership.objects.filter(user=request.user, role="instructor", status="pending").exists()
+    rejected_exists = UserCongresoMembership.objects.filter(user=request.user, role="instructor", status="rejected").exists()
+    memberships = list(UserCongresoMembership.objects.filter(user=request.user, role="instructor").order_by("-created_at"))
+    ctx = {
+        "pending_exists": pending_exists,
+        "rejected_exists": rejected_exists and not pending_exists,
+        "memberships": memberships,
+    }
+    return render(request, "instructores_vista/instructor_pendiente.html", ctx)
+
+
+@login_required
+def inicio_participante_view(request):
+    # Solo participantes (o superuser) pueden acceder a esta vista, incluso si su membresía está pendiente/rechazada.
+    if not (request.user.is_superuser or request.user.groups.filter(name__in=["Participantes"]).exists()):
+        messages.error(request, "Esta página es solo para participantes.")
+        return redirect("inicio")
+
+    # Tomar la membresía más reciente del usuario como participante para determinar estado.
+    membership = (
+        UserCongresoMembership.objects
+        .filter(user=request.user, role="participante")
+        .order_by("-decided_at", "-id")
+        .first()
+    )
+    congreso = membership.congreso if membership else None
+    status = membership.status if membership else "none"
+    approved = status == "approved"
+    # Etiqueta en español para el estado
+    status_label_map = {
+        "pending": "Pendiente",
+        "approved": "Aprobado",
+        "rejected": "Rechazado",
+        "none": "",
+    }
+    status_label = status_label_map.get(status, "")
+
+    # Inscripciones (mostrar solo la primera si hay varias, similar al mockup que lista un recurso)
+    taller_insc = None
+    concurso_insc = None
+    conferencia_insc = None
+    if approved and congreso:
+        taller_insc = (
+            TallerInscripcion.objects
+            .filter(user=request.user, congreso=congreso)
+            .select_related("taller")
+            .order_by("-created_at")
+            .first()
+        )
+        concurso_insc = (
+            ConcursoInscripcion.objects
+            .filter(user=request.user, congreso=congreso)
+            .select_related("concurso")
+            .order_by("-created_at")
+            .first()
+        )
+        conferencia_insc = (
+            ConferenciaInscripcion.objects
+            .filter(user=request.user, congreso=congreso)
+            .select_related("conferencia")
+            .order_by("-created_at")
+            .first()
+        )
+
+    # URLs para explorar (se deshabilitan en la plantilla si no aprobado)
+    # Redirigen a las nuevas páginas de participante
+    talleres_url = reverse("part_talleres")
+    concursos_url = reverse("part_concursos")
+    conferencias_url = reverse("part_conferencias")
+
+    ctx = {
+        "congreso": congreso,
+        "membership": membership,
+        "membership_status": status,
+        "membership_status_label": status_label,
+        "approved": approved,
+        "taller_insc": taller_insc,
+        "concurso_insc": concurso_insc,
+        "conferencia_insc": conferencia_insc,
+        "talleres_url": talleres_url,
+        "concursos_url": concursos_url,
+        "conferencias_url": conferencias_url,
+    }
+    return render(request, "participantes_vista/inicio_participante.html", ctx)
+
+
+@login_required
+def participante_base_context(request):
+    """Devuelve contexto base (congreso, approved, labels) para vistas de participantes.
+
+    Nota: Permite acceso aunque la membresía esté pendiente o rechazada; 
+    las acciones se restringen desde la UI.
+    """
+    if not (request.user.is_superuser or request.user.groups.filter(name__in=["Participantes"]).exists()):
+        messages.error(request, "Esta página es solo para participantes.")
+        return None
+
+    membership = (
+        UserCongresoMembership.objects
+        .filter(user=request.user, role="participante")
+        .order_by("-decided_at", "-id")
+        .first()
+    )
+    congreso = membership.congreso if membership else None
+    status = membership.status if membership else "none"
+    approved = status == "approved"
+    status_label_map = {"pending": "Pendiente", "approved": "Aprobado", "rejected": "Rechazado", "none": ""}
+    status_label = status_label_map.get(status, "")
+
+    return {
+        "congreso": congreso,
+        "membership": membership,
+        "membership_status": status,
+        "membership_status_label": status_label,
+        "approved": approved,
+        # Mantener variables usadas por el topbar/landing
+        "talleres_url": reverse("part_talleres"),
+        "concursos_url": reverse("part_concursos"),
+        "conferencias_url": reverse("part_conferencias"),
+    }
+
+
+@login_required
+def part_talleres_view(request):
+    ctx = participante_base_context(request)
+    if ctx is None:
+        return redirect("inicio")
+    congreso = ctx.get("congreso")
+    talleres = []
+    if congreso:
+        talleres = list(
+            Taller.objects
+            .filter(congreso=congreso)
+            .annotate(inscritos_count=Count("inscripciones"))
+            .order_by("-created_at")
+        )
+    ctx.update({"talleres": talleres})
+    return render(request, "participantes_vista/part_talleres.html", ctx)
+
+
+@login_required
+def part_concursos_view(request):
+    ctx = participante_base_context(request)
+    if ctx is None:
+        return redirect("inicio")
+    congreso = ctx.get("congreso")
+    concursos = []
+    if congreso:
+        concursos = list(
+            Concurso.objects
+            .filter(congreso=congreso)
+            .annotate(inscritos_count=Count("inscripciones"))
+            .order_by("-created_at")
+        )
+        # Calcular capacidad total para concursos grupales (equipos * máx/eq) y dejarla disponible en el objeto
+        for c in concursos:
+            if c.type == "individual":
+                c.capacidad_total = c.cupo_maximo if c.cupo_maximo else None
+                # Para concursos individuales no hay equipos: equipos_inscritos None
+                c.equipos_inscritos = None
+            else:
+                equipos = c.numero_equipos or 0
+                por_eq = c.max_por_equipo or 0
+                total = equipos * por_eq
+                c.capacidad_total = total if total > 0 else None
+                # No existe todavía un modelo de equipos; mostramos 0 como placeholder.
+                # Cuando se implemente Team/Equipo, reemplazar por conteo real distinto.
+                c.equipos_inscritos = 0
+    ctx.update({"concursos": concursos})
+    return render(request, "participantes_vista/part_concursos.html", ctx)
+
+
+@login_required
+def part_conferencias_view(request):
+    ctx = participante_base_context(request)
+    if ctx is None:
+        return redirect("inicio")
+    congreso = ctx.get("congreso")
+    conferencias = []
+    if congreso:
+        conferencias = list(
+            Conferencia.objects
+            .filter(congreso=congreso)
+            .annotate(inscritos_count=Count("inscripciones"))
+            .order_by("-created_at")
+        )
+    ctx.update({"conferencias": conferencias})
+    return render(request, "participantes_vista/part_conferencias.html", ctx)
+
+
+@login_required
+def part_taller_inscribir_view(request, taller_id: int):
+    ctx = participante_base_context(request)
+    if ctx is None:
+        return redirect("inicio")
+    congreso = ctx.get("congreso")
+    if not congreso:
+        return redirect("inicio_participante")
+    try:
+        taller = Taller.objects.get(pk=taller_id, congreso=congreso)
+    except Taller.DoesNotExist:
+        messages.error(request, "El taller solicitado no existe en este congreso.")
+        return redirect("part_talleres")
+    inscritos = taller.inscripciones.count()
+    capacidad = taller.cupo_maximo if taller.cupo_maximo else None
+    ya_inscrito = TallerInscripcion.objects.filter(congreso=congreso, taller=taller, user=request.user).exists()
+    ctx.update({
+        "taller": taller,
+        "inscritos": inscritos,
+        "capacidad": capacidad,
+        "ya_inscrito": ya_inscrito,
+    })
+    return render(request, "participantes_vista/part_taller_inscribir.html", ctx)
+
+
+@login_required
+def part_concurso_inscribir_view(request, concurso_id: int):
+    ctx = participante_base_context(request)
+    if ctx is None:
+        return redirect("inicio")
+    congreso = ctx.get("congreso")
+    if not congreso:
+        return redirect("inicio_participante")
+    try:
+        concurso = Concurso.objects.get(pk=concurso_id, congreso=congreso)
+    except Concurso.DoesNotExist:
+        messages.error(request, "El concurso solicitado no existe en este congreso.")
+        return redirect("part_concursos")
+    inscritos = concurso.inscripciones.count()
+    if concurso.type == "individual":
+        capacidad = concurso.cupo_maximo if concurso.cupo_maximo else None
+        equipos_inscritos = None
+    else:
+        capacidad = (concurso.numero_equipos or 0) * (concurso.max_por_equipo or 0) or None
+        # Placeholder hasta que exista estructura de equipos reales.
+        equipos_inscritos = 0
+    ya_inscrito = ConcursoInscripcion.objects.filter(congreso=congreso, concurso=concurso, user=request.user).exists()
+    ctx.update({
+        "concurso": concurso,
+        "inscritos": inscritos,
+        "capacidad": capacidad,
+        "ya_inscrito": ya_inscrito,
+        "equipos_inscritos": equipos_inscritos,
+    })
+    return render(request, "participantes_vista/part_concurso_inscribir.html", ctx)
+
+
+@login_required
+def part_conferencia_inscribir_view(request, conferencia_id: int):
+    ctx = participante_base_context(request)
+    if ctx is None:
+        return redirect("inicio")
+    congreso = ctx.get("congreso")
+    if not congreso:
+        return redirect("inicio_participante")
+    try:
+        conferencia = Conferencia.objects.get(pk=conferencia_id, congreso=congreso)
+    except Conferencia.DoesNotExist:
+        messages.error(request, "La conferencia solicitada no existe en este congreso.")
+        return redirect("part_conferencias")
+    inscritos = conferencia.inscripciones.count()
+    capacidad = conferencia.cupo_maximo if conferencia.cupo_maximo else None
+    ya_inscrito = ConferenciaInscripcion.objects.filter(congreso=congreso, conferencia=conferencia, user=request.user).exists()
+    ctx.update({
+        "conferencia": conferencia,
+        "inscritos": inscritos,
+        "capacidad": capacidad,
+        "ya_inscrito": ya_inscrito,
+    })
+    return render(request, "participantes_vista/part_conferencia_inscribir.html", ctx)
+
+
+@login_required
+def part_avisos_view(request):
+    ctx = participante_base_context(request)
+    if ctx is None:
+        return redirect("inicio")
+    return render(request, "participantes_vista/part_avisos.html", ctx)
+
+
+@login_required
+def part_perfil_view(request):
+    ctx = participante_base_context(request)
+    if ctx is None:
+        return redirect("inicio")
+    return render(request, "participantes_vista/part_perfil.html", ctx)
+
+
+# -------------------
+# INSTRUCTOR: PERFIL Y ALUMNOS
+# -------------------
+@login_required
+@instructors_area_only
+def instructor_perfil_view(request):
+    if not (request.user.is_superuser or request.user.groups.filter(name__in=["Instructores"]).exists()):
+        messages.error(request, "Esta página es solo para instructores.")
+        return redirect("inicio")
+
+    # Congreso principal (última membresía aprobada) para mostrar información contextual
+    membership = (
+        UserCongresoMembership.objects
+        .filter(user=request.user, role="instructor", status="approved")
+        .order_by("-decided_at", "-id")
+        .first()
+    )
+    congreso = membership.congreso if membership else None
+
+    # Dominios permitidos agregando todos los congresos aprobados del instructor
+    domain_set = set()
+    approved_memberships = UserCongresoMembership.objects.filter(user=request.user, status="approved").select_related("congreso")
+    for mem in approved_memberships:
+        doms = AllowedEmailDomain.objects.filter(congreso=mem.congreso).values_list("domain", flat=True)
+        for d in doms:
+            if d:
+                domain_set.add(d.lower().strip())
+
+    # Prellenar apellidos paterno/materno a partir de last_name actual (heurística simple)
+    ln = (request.user.last_name or "").strip()
+    ln_pat = ""
+    ln_mat = ""
+    if ln:
+        parts = ln.split()
+        if len(parts) >= 2:
+            ln_pat = parts[0]
+            ln_mat = " ".join(parts[1:])
+        else:
+            ln_pat = ln
+
+    context = {
+        "congreso": congreso,
+        "username_value": request.user.username,
+        "first_name_value": request.user.first_name,
+        "last_name_value": request.user.last_name,
+        "last_name_paterno_value": ln_pat,
+        "last_name_materno_value": ln_mat,
+        "allowed_domains_profile": sorted(domain_set),
+    }
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        # Actualizar nombre y apellidos
+        if action == "update_fullname":
+            first = request.POST.get("first_name", "").strip()
+            last_pat = request.POST.get("last_name_paterno", "").strip()
+            last_mat = request.POST.get("last_name_materno", "").strip()
+            combined_last = (last_pat + (" " + last_mat if last_mat else "")).strip()
+            if len(first) > 150 or len(combined_last) > 150 or len(last_pat) > 150 or len(last_mat) > 150:
+                messages.error(request, "Nombre o apellido demasiado largo (máx 150 caracteres).", extra_tags="fullname")
+            else:
+                request.user.first_name = first
+                request.user.last_name = combined_last
+                request.user.save(update_fields=["first_name", "last_name"])
+                messages.success(request, "Nombre y apellidos actualizados correctamente.", extra_tags="fullname")
+                context["first_name_value"] = first
+                context["last_name_value"] = combined_last
+                context["last_name_paterno_value"] = last_pat
+                context["last_name_materno_value"] = last_mat
+            return HttpResponseRedirect(reverse("instructor_perfil") + "#fullname")
+
+        elif action == "update_name":
+            new_username = request.POST.get("username", "").strip()
+            if not new_username:
+                messages.error(request, "El usuario (correo) no puede estar vacío.", extra_tags="user")
+            elif User.objects.exclude(pk=request.user.pk).filter(username=new_username).exists():
+                messages.error(request, "Ese usuario ya está en uso.", extra_tags="user")
+            elif len(new_username) > 150:
+                messages.error(request, "El usuario no puede exceder 150 caracteres.", extra_tags="user")
+            else:
+                try:
+                    validate_email(new_username)
+                except ValidationError:
+                    messages.error(request, "Debe ser un correo electrónico válido.", extra_tags="user")
+                    return HttpResponseRedirect(reverse("instructor_perfil") + "#user")
+                allowed_domains_profile = context.get("allowed_domains_profile") or []
+                if "@" in new_username and allowed_domains_profile:
+                    email_lc = new_username.lower()
+                    if not any(email_lc.endswith(d) for d in allowed_domains_profile):
+                        pretty = ", ".join(allowed_domains_profile)
+                        messages.error(
+                            request,
+                            f"El correo no pertenece a un dominio permitido por tus congresos activos: {pretty}",
+                            extra_tags="user",
+                        )
+                        return HttpResponseRedirect(reverse("instructor_perfil") + "#user")
+                request.user.username = new_username
+                if "@" in new_username:
+                    request.user.email = new_username
+                request.user.save()
+                messages.success(request, "Usuario actualizado correctamente.", extra_tags="user")
+                context["username_value"] = new_username
+            return HttpResponseRedirect(reverse("instructor_perfil") + "#user")
+
+        elif action == "update_password":
+            current = request.POST.get("current_password", "")
+            new = request.POST.get("new_password", "")
+            confirm = request.POST.get("confirm_password", "")
+            if not request.user.check_password(current):
+                messages.error(request, "La contraseña actual no es correcta.", extra_tags="password")
+            elif new != confirm:
+                messages.error(request, "La nueva contraseña y su confirmación no coinciden.", extra_tags="password")
+            elif len(new) < 8 or len(new) > 16:
+                messages.error(request, "La nueva contraseña debe tener entre 8 y 16 caracteres.", extra_tags="password")
+            else:
+                specials = set(".!%&$}")
+                if not any(c.isupper() for c in new) or not any(c.islower() for c in new) or not any(c in specials for c in new):
+                    messages.error(request, "La nueva contraseña debe contener mayúscula, minúscula y símbolo (.!%&$}).", extra_tags="password")
+                else:
+                    try:
+                        request.user.set_password(new)
+                        request.user.save()
+                        update_session_auth_hash(request, request.user)
+                        messages.success(request, "Contraseña actualizada correctamente.", extra_tags="password")
+                    except Exception:
+                        messages.error(request, "Error al actualizar la contraseña. Intenta nuevamente.", extra_tags="password")
+            return HttpResponseRedirect(reverse("instructor_perfil") + "#password")
+
+    return render(request, "instructores_vista/perfil_instructor.html", context)
+
+
+@login_required
+@instructors_area_only
+def instructor_participantes_view(request):
+    if not (request.user.is_superuser or request.user.groups.filter(name__in=["Instructores"]).exists()):
+        messages.error(request, "Esta página es solo para instructores.")
+        return redirect("inicio")
+    membership = (
+        UserCongresoMembership.objects
+        .filter(user=request.user, role="instructor", status="approved")
+        .order_by("-decided_at", "-id")
+        .first()
+    )
+    congreso = membership.congreso if membership else None
+    # Construir tablero de recursos (talleres, concursos, conferencias) del instructor en este congreso
+    talleres = list(Taller.objects.filter(congreso=congreso, instructor=request.user).order_by("title"))
+    concursos = list(Concurso.objects.filter(congreso=congreso, instructor=request.user).order_by("title"))
+    conferencias = list(Conferencia.objects.filter(congreso=congreso, instructor=request.user).order_by("title"))
+    recurso_rows = []
+    for t in talleres:
+        recurso_rows.append({"tipo": "taller", "obj": t, "titulo": t.title, "inscritos": t.inscripciones.count(), "url": f"{reverse('ins_taller_participantes')}?id={t.id}"})
+    for c in concursos:
+        recurso_rows.append({"tipo": "concurso", "obj": c, "titulo": c.title, "inscritos": c.inscripciones.count(), "url": f"{reverse('ins_concurso_participantes')}?id={c.id}"})
+    for cf in conferencias:
+        recurso_rows.append({"tipo": "conferencia", "obj": cf, "titulo": cf.title, "inscritos": cf.inscripciones.count(), "url": f"{reverse('ins_conferencia_participantes')}?id={cf.id}"})
+    recurso_rows.sort(key=lambda r: (r["tipo"], r["titulo"].lower()))
+    return render(request, "instructores_vista/instructor_participantes.html", {"congreso": congreso, "recurso_rows": recurso_rows})
+
+# -------------------
+# INSTRUCTOR: RECURSOS (Talleres / Concursos / Conferencias)
+# - Si el instructor ya tiene uno vinculado en el congreso activo, mostrar vista previa tipo detalle.
+# - Si no tiene, mostrar formulario básico de creación (similar a las páginas de admin pero simplificado).
+# -------------------
+@login_required
+@instructors_area_only
+def _get_active_instructor_congreso(request):
+    if not (request.user.is_superuser or request.user.groups.filter(name__in=["Instructores"]).exists()):
+        messages.error(request, "Esta página es solo para instructores.")
+        return None
+    active_id = request.session.get("instructor_active_congreso_id")
+    membership = None
+    if active_id:
+        membership = UserCongresoMembership.objects.filter(
+            user=request.user, role="instructor", status="approved", congreso_id=active_id
+        ).first()
+    if not membership:
+        membership = (
+            UserCongresoMembership.objects
+            .filter(user=request.user, role="instructor", status="approved")
+            .order_by("-decided_at", "-id").first()
+        )
+        if membership:
+            request.session["instructor_active_congreso_id"] = membership.congreso_id
+    return membership.congreso if membership else None
+
+
+@login_required
+@instructors_area_only
+def instructor_talleres_view(request):
+    """Listado y vista de talleres para el instructor.
+
+    Ahora soporta múltiples talleres. Permite seleccionar uno vía ?id=<taller_id>,
+    crear nuevos con action=create_taller y eliminar el activo con action=delete_taller.
+    Modo creación explícito con ?nuevo=1.
+    """
+    congreso = _get_active_instructor_congreso(request)
+    if not congreso:
+        return redirect("instructor_pendiente")
+    talleres_qs = Taller.objects.filter(congreso=congreso, instructor=request.user).order_by("-created_at")
+    nuevo_flag = request.GET.get("nuevo") == "1"
+    active_id = request.GET.get("id")
+    active = None
+    if active_id:
+        try:
+            active = talleres_qs.get(pk=active_id)
+        except Taller.DoesNotExist:
+            active = None
+    if not active and not nuevo_flag:
+        active = talleres_qs.first()
+    # Crear
+    if request.method == "POST" and request.POST.get("action") == "create_taller":
+        title = (request.POST.get("title") or "").strip()
+        lugar = (request.POST.get("lugar") or "").strip()
+        cupo = request.POST.get("cupo") or None
+        description = (request.POST.get("descripcion") or "").strip()
+        if not title:
+            messages.error(request, "El nombre del taller es obligatorio.")
+        else:
+            obj = Taller.objects.create(
+                congreso=congreso,
+                title=title,
+                lugar=lugar,
+                cupo_maximo=cupo or None,
+                description=description,
+                instructor=request.user,
+            )
+            image = request.FILES.get("image")
+            if image:
+                if image.size > 3 * 1024 * 1024:
+                    messages.warning(request, "La imagen supera 3MB, se ignoró.")
+                else:
+                    obj.image = image
+                    obj.save()
+            messages.success(request, "Taller creado correctamente.")
+            return redirect("ins_talleres")
+    # Eliminar activo
+    if request.method == "POST" and request.POST.get("action") == "delete_taller" and active:
+        if request.user.is_superuser or request.user.id == active.instructor_id or request.user.id == congreso.admin_user_id:
+            active.delete()
+            messages.success(request, "Taller eliminado correctamente.")
+        else:
+            messages.error(request, "No tienes permisos para eliminar este taller.")
+        return redirect("ins_talleres")
+    taller_inscritos = active.inscripciones.count() if active else 0
+    taller_capacidad = active.cupo_maximo if active and active.cupo_maximo else None
+    ctx = {
+        "congreso": congreso,
+        "talleres": list(talleres_qs),
+        "taller": active,
+        "taller_inscritos": taller_inscritos,
+        "taller_capacidad": taller_capacidad,
+        "creation_mode": nuevo_flag,
+    }
+    return render(request, "instructores_vista/ins_taller.html", ctx)
+
+
+@login_required
+@instructors_area_only
+def instructor_concursos_view(request):
+    congreso = _get_active_instructor_congreso(request)
+    if not congreso:
+        return redirect("instructor_pendiente")
+    concursos_qs = Concurso.objects.filter(congreso=congreso, instructor=request.user).order_by("-created_at")
+    nuevo_flag = request.GET.get("nuevo") == "1"
+    active_id = request.GET.get("id")
+    active = None
+    if active_id:
+        try:
+            active = concursos_qs.get(pk=active_id)
+        except Concurso.DoesNotExist:
+            active = None
+    if not active and not nuevo_flag:
+        active = concursos_qs.first()
+    # Crear
+    if request.method == "POST" and request.POST.get("action") == "create_concurso":
+        title = (request.POST.get("title") or "").strip()
+        tipo = (request.POST.get("type") or request.POST.get("tipo") or "individual").strip()
+        lugar = (request.POST.get("lugar") or "").strip()
+        description = (request.POST.get("descripcion") or request.POST.get("description") or "").strip()
+        cupo = request.POST.get("cupo") or request.POST.get("cupo_maximo") or None
+        equipos = request.POST.get("numero_equipos") or None
+        maxeq = request.POST.get("max_por_equipo") or None
+        if not title:
+            messages.error(request, "El nombre del concurso es obligatorio.")
+        else:
+            obj = Concurso.objects.create(
+                congreso=congreso,
+                title=title,
+                type=tipo,
+                lugar=lugar,
+                description=description,
+                cupo_maximo=cupo or None,
+                numero_equipos=equipos or None,
+                max_por_equipo=maxeq or None,
+                instructor=request.user,
+            )
+            image = request.FILES.get("image")
+            if image:
+                if image.size > 3 * 1024 * 1024:
+                    messages.warning(request, "La imagen supera 3MB, se ignoró.")
+                else:
+                    obj.image = image
+                    obj.save()
+            messages.success(request, "Concurso creado correctamente.")
+            return redirect("ins_concursos")
+    # Eliminar activo
+    if request.method == "POST" and request.POST.get("action") == "delete_concurso" and active:
+        if request.user.is_superuser or request.user.id == active.instructor_id or request.user.id == congreso.admin_user_id:
+            active.delete()
+            messages.success(request, "Concurso eliminado correctamente.")
+        else:
+            messages.error(request, "No tienes permisos para eliminar este concurso.")
+        return redirect("ins_concursos")
+    concurso_inscritos = active.inscripciones.count() if active else 0
+    if active:
+        if active.type == "individual":
+            concurso_capacidad = active.cupo_maximo if active.cupo_maximo else None
+        else:
+            if active.numero_equipos and active.max_por_equipo:
+                concurso_capacidad = active.numero_equipos * active.max_por_equipo
+            else:
+                concurso_capacidad = None
+    else:
+        concurso_capacidad = None
+    ctx = {
+        "congreso": congreso,
+        "concursos": list(concursos_qs),
+        "concurso": active,
+        "concurso_inscritos": concurso_inscritos,
+        "concurso_capacidad": concurso_capacidad,
+        "creation_mode": nuevo_flag,
+    }
+    return render(request, "instructores_vista/ins_concurso.html", ctx)
+
+
+@login_required
+@instructors_area_only
+def instructor_conferencias_view(request):
+    congreso = _get_active_instructor_congreso(request)
+    if not congreso:
+        return redirect("instructor_pendiente")
+    conferencias_qs = Conferencia.objects.filter(congreso=congreso, instructor=request.user).order_by("-created_at")
+    nuevo_flag = request.GET.get("nuevo") == "1"
+    active_id = request.GET.get("id")
+    active = None
+    if active_id:
+        try:
+            active = conferencias_qs.get(pk=active_id)
+        except Conferencia.DoesNotExist:
+            active = None
+    if not active and not nuevo_flag:
+        active = conferencias_qs.first()
+    # Crear
+    if request.method == "POST" and request.POST.get("action") == "create_conferencia":
+        title = (request.POST.get("title") or "").strip()
+        lugar = (request.POST.get("lugar") or "").strip()
+        description = (request.POST.get("descripcion") or request.POST.get("description") or "").strip()
+        cupo = request.POST.get("cupo") or request.POST.get("cupo_maximo") or None
+        if not title:
+            messages.error(request, "El nombre de la conferencia es obligatorio.")
+        else:
+            obj = Conferencia.objects.create(
+                congreso=congreso,
+                title=title,
+                lugar=lugar,
+                description=description,
+                cupo_maximo=cupo or None,
+                instructor=request.user,
+            )
+            image = request.FILES.get("image")
+            if image:
+                if image.size > 3 * 1024 * 1024:
+                    messages.warning(request, "La imagen supera 3MB, se ignoró.")
+                else:
+                    obj.image = image
+                    obj.save()
+            messages.success(request, "Conferencia creada correctamente.")
+            return redirect("ins_conferencias")
+    # Eliminar activo
+    if request.method == "POST" and request.POST.get("action") == "delete_conferencia" and active:
+        if request.user.is_superuser or request.user.id == active.instructor_id or request.user.id == congreso.admin_user_id:
+            active.delete()
+            messages.success(request, "Conferencia eliminada correctamente.")
+        else:
+            messages.error(request, "No tienes permisos para eliminar esta conferencia.")
+        return redirect("ins_conferencias")
+    conferencia_inscritos = active.inscripciones.count() if active else 0
+    conferencia_capacidad = active.cupo_maximo if active and active.cupo_maximo else None
+    ctx = {
+        "congreso": congreso,
+        "conferencias": list(conferencias_qs),
+        "conferencia": active,
+        "conferencia_inscritos": conferencia_inscritos,
+        "conferencia_capacidad": conferencia_capacidad,
+        "creation_mode": nuevo_flag,
+    }
+    return render(request, "instructores_vista/ins_conferencia.html", ctx)
+
+
+# -------------------
+# INSTRUCTOR EDIT PAGES (owner style) for Taller/Concurso/Conferencia
+# -------------------
+@login_required
+@instructors_area_only
+def instructor_taller_editar_view(request):
+    congreso = _get_active_instructor_congreso(request)
+    if not congreso:
+        return redirect("instructor_pendiente")
+    taller = Taller.objects.filter(congreso=congreso, instructor=request.user).order_by("-created_at").first()
+    if not taller:
+        messages.info(request, "No tienes un taller creado aún.")
+        return redirect("ins_talleres")
+    # Permisos: dueño o admin del congreso
+    if not (request.user.id == taller.instructor_id or _user_is_congreso_admin(request.user, congreso)):
+        messages.error(request, "No tienes permisos para editar este taller.")
+        return redirect("ins_talleres")
+    if request.method == "POST":
+        title = (request.POST.get("title") or "").strip()
+        lugar = (request.POST.get("lugar") or "").strip()
+        cupo = request.POST.get("cupo")
+        descripcion = (request.POST.get("descripcion") or "").strip()
+        image = request.FILES.get("image")
+        has_error = False
+        if not title:
+            messages.error(request, "El nombre del taller es obligatorio.")
+            has_error = True
+        if image and isinstance(image, UploadedFile) and image.size > 3 * 1024 * 1024:
+            messages.error(request, "La imagen excede el tamaño máximo de 3MB.")
+            has_error = True
+        cupo_val = None
+        if cupo:
+            try:
+                cupo_val = max(0, int(cupo))
+            except ValueError:
+                messages.error(request, "Cupo debe ser un número entero.")
+                has_error = True
+        if not has_error:
+            taller.title = title
+            taller.lugar = lugar
+            taller.cupo_maximo = cupo_val
+            taller.description = descripcion
+            if image:
+                taller.image = image
+            taller.save()
+            messages.success(request, "Taller actualizado.")
+            return redirect("ins_talleres")
+    ctx = {"congreso": congreso, "taller": taller}
+    return render(request, "instructores_vista/ins_taller_editar.html", ctx)
+
+
+@login_required
+@instructors_area_only
+def instructor_concurso_editar_view(request):
+    congreso = _get_active_instructor_congreso(request)
+    if not congreso:
+        return redirect("instructor_pendiente")
+    concurso = Concurso.objects.filter(congreso=congreso, instructor=request.user).order_by("-created_at").first()
+    if not concurso:
+        messages.info(request, "No tienes un concurso creado aún.")
+        return redirect("ins_concursos")
+    if not (request.user.id == concurso.instructor_id or _user_is_congreso_admin(request.user, congreso)):
+        messages.error(request, "No tienes permisos para editar este concurso.")
+        return redirect("ins_concursos")
+    if request.method == "POST":
+        tipo = (request.POST.get("tipo") or concurso.type or "individual").strip()
+        title = (request.POST.get("title") or "").strip()
+        lugar = (request.POST.get("lugar") or "").strip()
+        descripcion = (request.POST.get("descripcion") or "").strip()
+        image = request.FILES.get("image")
+        cupo = request.POST.get("cupo")
+        numero_equipos = request.POST.get("numero_equipos")
+        max_por_equipo = request.POST.get("max_por_equipo")
+        has_error = False
+        if tipo not in ("individual", "grupal"):
+            tipo = "individual"
+        if not title:
+            messages.error(request, "El nombre del concurso es obligatorio.")
+            has_error = True
+        if image and isinstance(image, UploadedFile) and image.size > 3 * 1024 * 1024:
+            messages.error(request, "La imagen excede el tamaño máximo de 3MB.")
+            has_error = True
+        cupo_val = None
+        num_eq_val = None
+        max_eq_val = None
+        if tipo == "individual":
+            if cupo:
+                try:
+                    cupo_val = max(0, int(cupo))
+                except ValueError:
+                    messages.error(request, "Cupo debe ser un número entero.")
+                    has_error = True
+        else:
+            if numero_equipos:
+                try:
+                    num_eq_val = max(0, int(numero_equipos))
+                except ValueError:
+                    messages.error(request, "Número de equipos debe ser entero.")
+                    has_error = True
+            if max_por_equipo:
+                try:
+                    max_eq_val = max(0, int(max_por_equipo))
+                except ValueError:
+                    messages.error(request, "Número máximo por equipo debe ser entero.")
+                    has_error = True
+        if not has_error:
+            concurso.type = tipo
+            concurso.title = title
+            concurso.lugar = lugar
+            concurso.description = descripcion
+            concurso.cupo_maximo = cupo_val if tipo == "individual" else None
+            concurso.numero_equipos = num_eq_val if tipo == "grupal" else None
+            concurso.max_por_equipo = max_eq_val if tipo == "grupal" else None
+            if image:
+                concurso.image = image
+            concurso.save()
+            messages.success(request, "Concurso actualizado.")
+            return redirect("ins_concursos")
+    ctx = {"congreso": congreso, "concurso": concurso}
+    return render(request, "instructores_vista/ins_concurso_editar.html", ctx)
+
+
+@login_required
+@instructors_area_only
+def instructor_conferencia_editar_view(request):
+    congreso = _get_active_instructor_congreso(request)
+    if not congreso:
+        return redirect("instructor_pendiente")
+    conferencia = Conferencia.objects.filter(congreso=congreso, instructor=request.user).order_by("-created_at").first()
+    if not conferencia:
+        messages.info(request, "No tienes una conferencia creada aún.")
+        return redirect("ins_conferencias")
+    if not (request.user.id == conferencia.instructor_id or _user_is_congreso_admin(request.user, congreso)):
+        messages.error(request, "No tienes permisos para editar esta conferencia.")
+        return redirect("ins_conferencias")
+    if request.method == "POST":
+        title = (request.POST.get("title") or "").strip()
+        lugar = (request.POST.get("lugar") or "").strip()
+        descripcion = (request.POST.get("descripcion") or "").strip()
+        cupo = request.POST.get("cupo") or request.POST.get("cupo_maximo") or None
+        image = request.FILES.get("image")
+        has_error = False
+        if not title:
+            messages.error(request, "El nombre de la conferencia es obligatorio.")
+            has_error = True
+        if image and isinstance(image, UploadedFile) and image.size > 3 * 1024 * 1024:
+            messages.error(request, "La imagen excede el tamaño máximo de 3MB.")
+            has_error = True
+        if not has_error:
+            conferencia.title = title
+            conferencia.lugar = lugar
+            conferencia.description = descripcion
+            conferencia.cupo_maximo = cupo or None
+            if image:
+                conferencia.image = image
+            conferencia.save()
+            messages.success(request, "Conferencia actualizada.")
+            return redirect("ins_conferencias")
+    ctx = {"congreso": congreso, "conferencia": conferencia}
+    return render(request, "instructores_vista/ins_conferencia_editar.html", ctx)
+
+# -------------------
+# INSTRUCTOR PARTICIPANTES PAGES
+# -------------------
+@login_required
+@instructors_area_only
+def instructor_taller_participantes_view(request):
+    congreso = _get_active_instructor_congreso(request)
+    if not congreso:
+        return redirect("instructor_pendiente")
+    # Permitir elegir un taller específico vía ?id=, con fallback al último creado
+    taller_id = request.GET.get("id")
+    qs_taller = Taller.objects.filter(congreso=congreso, instructor=request.user)
+    if taller_id:
+        taller = qs_taller.filter(pk=taller_id).first()
+    else:
+        taller = qs_taller.order_by("-created_at").first()
+    if not taller:
+        messages.info(request, "No tienes un taller creado aún.")
+        return redirect("ins_talleres")
+    inscripciones = list(taller.inscripciones.select_related("user", "performance_level"))
+    puede_remover = request.user.is_superuser or request.user.id == congreso.admin_user_id or request.user.id == taller.instructor_id
+    if request.method == "POST" and puede_remover and request.POST.get("action") == "remove":
+        insc_id = request.POST.get("insc_id")
+        try:
+            ins = taller.inscripciones.get(pk=insc_id)
+            ins.delete()
+            messages.success(request, "Participante removido del taller.")
+            # Si se indicó id, mantenerlo al recargar
+            if taller_id:
+                return redirect(f"{reverse('ins_taller_participantes')}?id={taller.id}")
+            return redirect("ins_taller_participantes")
+        except Exception:
+            messages.error(request, "No se pudo remover la inscripción.")
+    ctx = {"congreso": congreso, "taller": taller, "inscripciones": inscripciones, "puede_remover": puede_remover}
+    return render(request, "instructores_vista/ins_taller_participantes.html", ctx)
+
+@login_required
+@instructors_area_only
+def instructor_concurso_participantes_view(request):
+    congreso = _get_active_instructor_congreso(request)
+    if not congreso:
+        return redirect("instructor_pendiente")
+    concurso_id = request.GET.get("id")
+    qs_conc = Concurso.objects.filter(congreso=congreso, instructor=request.user)
+    if concurso_id:
+        concurso = qs_conc.filter(pk=concurso_id).first()
+    else:
+        concurso = qs_conc.order_by("-created_at").first()
+    if not concurso:
+        messages.info(request, "No tienes un concurso creado aún.")
+        return redirect("ins_concursos")
+    inscripciones = list(concurso.inscripciones.select_related("user"))
+    puede_remover = bool(concurso) and (request.user.is_superuser or request.user.id == congreso.admin_user_id or request.user.id == concurso.instructor_id)
+    if request.method == "POST" and puede_remover and request.POST.get("action") == "remove":
+        insc_id = request.POST.get("insc_id")
+        try:
+            ins = concurso.inscripciones.get(pk=insc_id)
+            ins.delete()
+            messages.success(request, "Participante removido del concurso.")
+            return redirect("ins_concurso_participantes")
+        except Exception:
+            messages.error(request, "No se pudo remover la inscripción.")
+    ctx = {"congreso": congreso, "concurso": concurso, "inscripciones": inscripciones, "puede_remover": puede_remover}
+    return render(request, "instructores_vista/ins_concurso_participantes.html", ctx)
+
+@login_required
+@instructors_area_only
+def instructor_conferencia_participantes_view(request):
+    congreso = _get_active_instructor_congreso(request)
+    if not congreso:
+        return redirect("instructor_pendiente")
+    conferencia_id = request.GET.get("id")
+    qs_conf = Conferencia.objects.filter(congreso=congreso, instructor=request.user)
+    if conferencia_id:
+        conferencia = qs_conf.filter(pk=conferencia_id).first()
+    else:
+        conferencia = qs_conf.order_by("-created_at").first()
+    if not conferencia:
+        messages.info(request, "No tienes una conferencia creada aún.")
+        return redirect("ins_conferencias")
+    inscripciones = list(conferencia.inscripciones.select_related("user", "performance_level"))
+    puede_remover = bool(conferencia) and (request.user.is_superuser or request.user.id == congreso.admin_user_id or request.user.id == conferencia.instructor_id)
+    if request.method == "POST" and puede_remover and request.POST.get("action") == "remove":
+        insc_id = request.POST.get("insc_id")
+        try:
+            ins = conferencia.inscripciones.get(pk=insc_id)
+            ins.delete()
+            messages.success(request, "Participante removido de la conferencia.")
+            return redirect("ins_conferencia_participantes")
+        except Exception:
+            messages.error(request, "No se pudo remover la inscripción.")
+    ctx = {"congreso": congreso, "conferencia": conferencia, "inscripciones": inscripciones, "puede_remover": puede_remover}
+    return render(request, "instructores_vista/ins_conferencia_participantes.html", ctx)
 @login_required
 def usuario_participante_nuevo_view(request, congreso_id: int):
     deny = _deny_non_admin_roles(request)
@@ -2337,9 +3419,7 @@ def taller_editar_view(request, congreso_id: int, taller_id: int):
     except Congreso.DoesNotExist:
         messages.error(request, "El congreso solicitado no existe.")
         return redirect("congresos_eventos")
-    guard = _ensure_congreso_access_or_redirect(request, congreso)
-    if guard:
-        return guard
+    # Permitir acceso a instructores dueños del recurso, además de admins/superusers
     grupos = request.user.groups.values_list("name", flat=True)
     if "Instructores" in grupos:
         rol = "Instructor"
@@ -2353,6 +3433,14 @@ def taller_editar_view(request, congreso_id: int, taller_id: int):
     except Taller.DoesNotExist:
         messages.error(request, "El taller solicitado no existe en este congreso.")
         return redirect("talleres_list", congreso.id)
+
+    is_owner_instructor = (request.user.groups.filter(name__in=["Instructores"]).exists() and taller.instructor_id == request.user.id)
+    is_admin_user = _user_is_congreso_admin(request.user, congreso)
+    if not (is_owner_instructor or is_admin_user):
+        # Para otros roles mantener guardias habituales
+        guard = _ensure_congreso_access_or_redirect(request, congreso)
+        if guard:
+            return guard
 
     instructors = list(
         User.objects.filter(
@@ -2382,13 +3470,17 @@ def taller_editar_view(request, congreso_id: int, taller_id: int):
             messages.error(request, "La imagen excede el tamaño máximo de 3MB.")
             has_error = True
 
-        instructor = None
-        if instructor_id:
-            try:
-                instructor = next(u for u in instructors if str(u.id) == str(instructor_id))
-            except StopIteration:
-                messages.error(request, "Instructor inválido para este congreso.")
-                has_error = True
+        # Si es el dueño (instructor), forzar instructor a sí mismo; si es admin, permitir cambio
+        instructor = taller.instructor
+        if is_admin_user:
+            if instructor_id:
+                try:
+                    instructor = next(u for u in instructors if str(u.id) == str(instructor_id))
+                except StopIteration:
+                    messages.error(request, "Instructor inválido para este congreso.")
+                    has_error = True
+        else:
+            instructor = request.user
 
         cupo_val = None
         if cupo:
@@ -2529,9 +3621,7 @@ def concurso_editar_view(request, congreso_id: int, concurso_id: int):
     except Congreso.DoesNotExist:
         messages.error(request, "El congreso solicitado no existe.")
         return redirect("congresos_eventos")
-    guard = _ensure_congreso_access_or_redirect(request, congreso)
-    if guard:
-        return guard
+    # Permitir acceso a instructores dueños del recurso, además de admins/superusers
     grupos = request.user.groups.values_list("name", flat=True)
     if "Instructores" in grupos:
         rol = "Instructor"
@@ -2545,6 +3635,13 @@ def concurso_editar_view(request, congreso_id: int, concurso_id: int):
     except Concurso.DoesNotExist:
         messages.error(request, "El concurso solicitado no existe en este congreso.")
         return redirect("concursos_list", congreso.id)
+
+    is_owner_instructor = (request.user.groups.filter(name__in=["Instructores"]).exists() and concurso.instructor_id == request.user.id)
+    is_admin_user = _user_is_congreso_admin(request.user, congreso)
+    if not (is_owner_instructor or is_admin_user):
+        guard = _ensure_congreso_access_or_redirect(request, congreso)
+        if guard:
+            return guard
 
     instructors = list(
         User.objects.filter(
@@ -2579,13 +3676,17 @@ def concurso_editar_view(request, congreso_id: int, concurso_id: int):
             messages.error(request, "La imagen excede el tamaño máximo de 3MB.")
             has_error = True
 
-        instructor = None
-        if instructor_id:
-            try:
-                instructor = next(u for u in instructors if str(u.id) == str(instructor_id))
-            except StopIteration:
-                messages.error(request, "Instructor inválido para este congreso.")
-                has_error = True
+        # Si es el dueño (instructor), forzar instructor a sí mismo; si es admin, permitir cambio
+        instructor = concurso.instructor
+        if is_admin_user:
+            if instructor_id:
+                try:
+                    instructor = next(u for u in instructors if str(u.id) == str(instructor_id))
+                except StopIteration:
+                    messages.error(request, "Instructor inválido para este congreso.")
+                    has_error = True
+        else:
+            instructor = request.user
 
         cupo_val = None
         num_eq_val = None
@@ -2663,6 +3764,7 @@ def conferencia_nueva_view(request, congreso_id: int):
         lugar = (request.POST.get("lugar") or "").strip()
         instructor_id = request.POST.get("instructor_id")
         descripcion = (request.POST.get("descripcion") or "").strip()
+        cupo = request.POST.get("cupo") or request.POST.get("cupo_maximo") or None
         image = request.FILES.get("image")
 
         has_error = False
@@ -2692,6 +3794,7 @@ def conferencia_nueva_view(request, congreso_id: int):
                 lugar=lugar,
                 instructor=instructor,
                 description=descripcion,
+                cupo_maximo=cupo or None,
             )
             if image:
                 c.image = image
@@ -2709,9 +3812,7 @@ def conferencia_editar_view(request, congreso_id: int, conferencia_id: int):
     except Congreso.DoesNotExist:
         messages.error(request, "El congreso solicitado no existe.")
         return redirect("congresos_eventos")
-    guard = _ensure_congreso_access_or_redirect(request, congreso)
-    if guard:
-        return guard
+    # El acceso de administradores se valida más abajo; permitir dueños instructores
     grupos = request.user.groups.values_list("name", flat=True)
     if "Instructores" in grupos:
         rol = "Instructor"
@@ -2726,6 +3827,13 @@ def conferencia_editar_view(request, congreso_id: int, conferencia_id: int):
         messages.error(request, "La conferencia solicitada no existe en este congreso.")
         return redirect("conferencias_list", congreso.id)
 
+    is_owner_instructor = (request.user.groups.filter(name__in=["Instructores"]).exists() and conferencia.instructor_id == request.user.id)
+    is_admin_user = _user_is_congreso_admin(request.user, congreso)
+    if not (is_owner_instructor or is_admin_user):
+        guard = _ensure_congreso_access_or_redirect(request, congreso)
+        if guard:
+            return guard
+
     instructors = list(
         User.objects.filter(
             congreso_memberships__congreso=congreso,
@@ -2739,6 +3847,7 @@ def conferencia_editar_view(request, congreso_id: int, conferencia_id: int):
         lugar = (request.POST.get("lugar") or "").strip()
         instructor_id = request.POST.get("instructor_id")
         descripcion = (request.POST.get("descripcion") or "").strip()
+        cupo = request.POST.get("cupo") or request.POST.get("cupo_maximo") or None
         image = request.FILES.get("image")
 
         has_error = False
@@ -2753,19 +3862,24 @@ def conferencia_editar_view(request, congreso_id: int, conferencia_id: int):
             messages.error(request, "La imagen excede el tamaño máximo de 3MB.")
             has_error = True
 
-        instructor = None
-        if instructor_id:
-            try:
-                instructor = next(u for u in instructors if str(u.id) == str(instructor_id))
-            except StopIteration:
-                messages.error(request, "Instructor inválido para este congreso.")
-                has_error = True
+        # Si es dueño instructor, forzar a sí mismo; si es admin, permitir cambio
+        instructor = conferencia.instructor
+        if is_admin_user:
+            if instructor_id:
+                try:
+                    instructor = next(u for u in instructors if str(u.id) == str(instructor_id))
+                except StopIteration:
+                    messages.error(request, "Instructor inválido para este congreso.")
+                    has_error = True
+        else:
+            instructor = request.user
 
         if not has_error:
             conferencia.title = title
             conferencia.lugar = lugar
             conferencia.instructor = instructor
             conferencia.description = descripcion
+            conferencia.cupo_maximo = cupo or None
             if image:
                 conferencia.image = image
             conferencia.save()

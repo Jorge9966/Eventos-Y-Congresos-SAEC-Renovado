@@ -74,11 +74,17 @@
     </div>
     {% include 'partials/footer.html' %}
   </div>
-  <script src="https://cdn.ckeditor.com/4.22.1/standard-all/ckeditor.js"></script>
+  {% include 'partials/ckeditor_full_toolbar.html' %}
   <script>
-    if (window.CKEDITOR) {
-      CKEDITOR.replace('descripcion', {height: 260});
+    // Inicialización robusta: reutiliza el mismo toolbar completo que en ins_taller_editar
+    function initDescripcionTallerAccion(){
+      const el = document.getElementById('descripcion');
+      if(!el) return;
+      if(typeof initInstructorEditor === 'function'){ initInstructorEditor('descripcion'); return; }
+      if(window.CKEDITOR){ CKEDITOR.replace('descripcion',{height:320}); return; }
+      setTimeout(initDescripcionTallerAccion,150);
     }
+    document.addEventListener('DOMContentLoaded', initDescripcionTallerAccion);
   </script>
 </body>
 </html>

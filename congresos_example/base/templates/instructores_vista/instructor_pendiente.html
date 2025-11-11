@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Estado de Instructor - SAEC</title>
+  {% load static %}
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  {% include '_congreso_base_styles.html' %}
+  <style>
+    body { background:#eef3fa; }
+    .pending-wrapper { max-width:860px; margin:70px auto; background:#fff; border:1px solid #e2e8f0; border-radius:16px; padding:48px 60px; box-shadow:0 10px 28px rgba(15,23,42,.08),0 4px 12px rgba(15,23,42,.04); }
+    h1 { font-size:2rem; font-weight:700; margin-bottom:22px; color:#0f172a; }
+    .state-badge { display:inline-block; padding:6px 14px; border-radius:20px; font-size:0.75rem; font-weight:600; letter-spacing:.5px; text-transform:uppercase; }
+    .state-pending { background:#fef3c7; color:#92400e; }
+    .state-rejected { background:#fee2e2; color:#991b1b; }
+    .list-group-item { border:none; border-bottom:1px solid #e2e8f0; }
+    .empty { background:#dbeafe; border:1px dashed #93c5fd; padding:22px 28px; border-radius:12px; font-size:0.95rem; }
+    a.btn-primary { background:#0b5ed7; border:none; font-weight:600; }
+    a.btn-primary:hover { background:#0949a8; }
+  </style>
+</head>
+<body>
+  <div class="pending-wrapper">
+    <h1>Estado de tu acceso como Instructor</h1>
+    {% if pending_exists %}
+      <div class="mb-3"><span class="state-badge state-pending">SOLICITUD PENDIENTE</span></div>
+      <p>Tu solicitud para ser instructor está en revisión. Cuando sea aprobada te redirigiremos automáticamente al panel del congreso correspondiente.</p>
+    {% elif rejected_exists %}
+      <div class="mb-3"><span class="state-badge state-rejected">SOLICITUD RECHAZADA</span></div>
+      <p>Tu última solicitud fue rechazada. Puedes contactar al administrador del congreso para más detalles o intentar nuevamente en otro congreso.</p>
+    {% else %}
+      <div class="empty mb-3">
+        Aún no has solicitado acceso como instructor en ningún congreso.<br>
+        Dirígete al listado de congresos y solicita tu participación como instructor.
+      </div>
+    {% endif %}
+
+    <h2 style="font-size:1.1rem; font-weight:600; margin:34px 0 14px;">Historial de solicitudes</h2>
+    {% if memberships %}
+      <ul class="list-group mb-4">
+        {% for m in memberships %}
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <div>
+              <strong>{{ m.congreso.name }}</strong><br>
+              <small class="text-muted">Creada: {{ m.created_at|date:'d/m/Y H:i' }}</small>
+            </div>
+            <div>
+              {% if m.status == 'pending' %}<span class="badge rounded-pill text-bg-warning">Pendiente</span>{% endif %}
+              {% if m.status == 'approved' %}<span class="badge rounded-pill text-bg-success">Aprobada</span>{% endif %}
+              {% if m.status == 'rejected' %}<span class="badge rounded-pill text-bg-danger">Rechazada</span>{% endif %}
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-muted">No hay registros aún.</p>
+    {% endif %}
+
+    <div class="d-flex gap-2">
+      <a href="{% url 'congresos_eventos' %}" class="btn btn-primary">Ver Congresos</a>
+      <a href="{% url 'logout' %}" class="btn btn-outline-secondary">Cerrar sesión</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -115,8 +115,15 @@
   .type-input:checked + label{ border-color:#0d6efd; box-shadow:0 10px 22px rgba(13,110,253,.18); }
   .hidden{ display:none !important; }
 </style>
-<script src="https://cdn.ckeditor.com/4.22.1/standard-all/ckeditor.js"></script>
+{% include 'partials/ckeditor_full_toolbar.html' %}
 <script>
+  function initDescripcionConcursoEdit(){
+    const d = document.getElementById('descripcion');
+    if(!d) return;
+    if(typeof initInstructorEditor === 'function'){ initInstructorEditor('descripcion'); return; }
+    if(window.CKEDITOR){ CKEDITOR.replace('descripcion',{height:320}); return; }
+    setTimeout(initDescripcionConcursoEdit,150);
+  }
   (function(){
     function sync(){
       var ind = document.getElementById('tipo_ind');
@@ -128,9 +135,8 @@
         fG.classList.toggle('hidden', isInd);
       }
     }
-    var radios = document.querySelectorAll('input[name="tipo"]');
-    radios.forEach(function(r){ r.addEventListener('change', sync); });
+    document.querySelectorAll('input[name="tipo"]').forEach(r=> r.addEventListener('change', sync));
     sync();
-    if (window.CKEDITOR) { CKEDITOR.replace('descripcion', {height: 260}); }
+    initDescripcionConcursoEdit();
   })();
 </script>

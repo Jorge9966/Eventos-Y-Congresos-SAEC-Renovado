@@ -148,29 +148,16 @@
     {% include 'partials/footer.html' %}
   </div>
 
+  {% include 'partials/ckeditor_full_toolbar.html' %}
   <script>
-    // Cargar CKEditor 4 de CDN y aplicarlo al textarea de descripción
-  </script>
-  <script src="https://cdn.ckeditor.com/4.22.1/standard-all/ckeditor.js"></script>
-  <script>
-    if (window.CKEDITOR) {
-      CKEDITOR.replace('descripcion', {
-        language: 'es',
-        removePlugins: 'elementspath',
-        resize_enabled: false,
-        height: 260,
-        toolbar: [
-          { name: 'clipboard', items: ['Undo', 'Redo'] },
-          { name: 'styles', items: ['Font', 'FontSize'] },
-          { name: 'basicstyles', items: ['Bold', 'Italic', 'Underline', 'Strike', '-', 'RemoveFormat'] },
-          { name: 'paragraph', items: ['NumberedList', 'BulletedList', '-', 'Outdent', 'Indent', '-', 'JustifyLeft','JustifyCenter','JustifyRight'] },
-          { name: 'links', items: ['Link', 'Unlink'] },
-          { name: 'insert', items: ['Table'] },
-          { name: 'colors', items: ['TextColor', 'BGColor'] },
-          { name: 'tools', items: ['Maximize'] }
-        ]
-      });
+    function initDescripcionCongreso(){
+      const el = document.getElementById('descripcion');
+      if(!el) return;
+      if(typeof initInstructorEditor === 'function'){ initInstructorEditor('descripcion'); return; }
+      if(window.CKEDITOR){ CKEDITOR.replace('descripcion',{height:320}); return; }
+      setTimeout(initDescripcionCongreso,150);
     }
+    document.addEventListener('DOMContentLoaded', initDescripcionCongreso);
     (function(){
       var btn = document.getElementById('btnBurger');
       if(btn){ btn.addEventListener('click', function(){ document.body.classList.toggle('sidebar-collapsed'); }); }

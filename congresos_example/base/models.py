@@ -187,6 +187,7 @@ class Conferencia(models.Model):
 	title = models.CharField("Nombre de la conferencia", max_length=200)
 	image = models.ImageField(upload_to="conferencias/", null=True, blank=True)
 	lugar = models.CharField("Lugar", max_length=200, blank=True)
+	cupo_maximo = models.PositiveIntegerField("Cupo máximo", null=True, blank=True)
 	instructor = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name="conferencias_imparte")
 	description = models.TextField("Descripción", blank=True)
 	created_at = models.DateTimeField(auto_now_add=True)

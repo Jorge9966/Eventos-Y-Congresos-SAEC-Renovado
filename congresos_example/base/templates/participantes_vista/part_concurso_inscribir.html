@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Concurso | Inscripción</title>
+  {% load static extra_filters %}
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;font-family:'Inter',Arial,Helvetica,sans-serif;background:#f1f5f9;}
+    .hero{background:linear-gradient(rgba(11,94,215,.82),rgba(11,94,215,.82)), url('{% static "base/img/bloggrid-heading-bg.jpg" %}') center/cover no-repeat;padding:46px 30px;text-align:center;}
+    .hero h1{color:#fff;font-size:2.2rem;font-weight:800;letter-spacing:.5px;margin:0;}
+    .wrap{max-width:1050px;margin:30px auto 70px;padding:0 40px;}
+    .card-main{background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.04);overflow:hidden;}
+    .banner-img{width:100%;height:280px;object-fit:cover;background:#e2e8f0;}
+    .content{padding:26px 30px;}
+    h2.title{font-size:1.6rem;font-weight:800;color:#0b1730;margin:0 0 14px;}
+    .desc{font-size:.95rem;line-height:1.5;color:#334155;margin-bottom:18px;white-space:pre-line;}
+    .meta{display:flex;flex-wrap:wrap;gap:16px;font-size:.8rem;color:#475569;margin-bottom:18px;}
+    .badge-soft{background:#eff6ff;color:#0b5ed7;font-weight:600;padding:6px 10px;border-radius:8px;font-size:.72rem;border:1px solid #bfdbfe;}
+    .enroll-box{background:#f8fafc;border:1px solid #e2e8f0;padding:18px 20px;border-radius:12px;margin-top:8px;}
+    .enroll-btn{display:inline-block;background:#0b5ed7;color:#fff;text-decoration:none;font-weight:700;padding:12px 24px;border-radius:10px;box-shadow:0 2px 4px rgba(0,0,0,.12);}
+    .enroll-btn:hover{background:#094ba8;}
+    .enroll-btn.disabled{background:#94a3b8;pointer-events:none;}
+    .status-msg{font-size:.8rem;color:#475569;margin-top:8px;}
+  </style>
+</head>
+<body>
+  {% include 'partials/participante_topbar.html' %}
+  <header class="hero">
+    <h1>CONCURSO</h1>
+  </header>
+  <main class="wrap">
+    <article class="card-main">
+      {% if concurso.image %}
+        <img class="banner-img" src="{{ concurso.image.url }}" alt="{{ concurso.title }}">
+      {% else %}
+        <img class="banner-img" src="{% static 'base/img/bloggrid-heading-bg.jpg' %}" alt="{{ concurso.title }}">
+      {% endif %}
+      <div class="content">
+        <h2 class="title">{{ concurso.title }}</h2>
+        <div class="meta">
+          {% if concurso.type == 'individual' %}
+            <span class="badge-soft">Inscritos: {{ inscritos }}{% if capacidad %} de {{ capacidad }}{% endif %}</span>
+            <span class="badge-soft">Tipo: Individual</span>
+          {% else %}
+            <span class="badge-soft">Equipos: {{ equipos_inscritos|default:0 }}{% if concurso.numero_equipos %} de {{ concurso.numero_equipos }}{% endif %}</span>
+            <span class="badge-soft">Tipo: Grupal</span>
+            <span class="badge-soft">Equipos: {{ concurso.numero_equipos|default:'—' }} · Máx/Integrantes: {{ concurso.max_por_equipo|default:'—' }}</span>
+          {% endif %}
+          {% if concurso.lugar %}<span class="badge-soft">Lugar: {{ concurso.lugar }}</span>{% endif %}
+        </div>
+        <div class="desc">{{ concurso.description|default:"Sin descripción" }}</div>
+        <div class="enroll-box">
+          {% if ya_inscrito %}
+            <div class="status-msg">Ya estás inscrito en este concurso.</div>
+          {% elif not approved %}
+            <div class="status-msg">Tu membresía aún no está aprobada. No puedes inscribirte.</div>
+          {% else %}
+            <a class="enroll-btn" href="#" onclick="alert('Inscripción pendiente de implementar backend.');return false;">Inscribirme</a>
+            <div class="status-msg">Completa tu inscripción. (Acción backend pendiente)</div>
+          {% endif %}
+        </div>
+      </div>
+    </article>
+  </main>
+  {% include 'partials/footer_participante.html' %}
+</body>
+</html>

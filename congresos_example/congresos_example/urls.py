@@ -67,6 +67,11 @@ urlpatterns = [
     path('perfil/', views.perfil_view, name='perfil'),
     path('recuperar-contrasena/', views.recuperar_contrasena_view, name='password_reset'),
     path('restablecer/', views.code_password_view, name='code_password'),
+    # Instructor area (non-namespaced for global reverse)
+    path('instructor/inicio/', views.inicio_instructor_view, name='inicio_instructor'),
+    path('instructor/perfil/', views.instructor_perfil_view, name='instructor_perfil'),
+    path('instructor/participantes/', views.instructor_participantes_view, name='instructor_participantes'),
+    path('instructor/pendiente/', views.instructor_pendiente_view, name='instructor_pendiente'),
 ]
 
 if settings.DEBUG:

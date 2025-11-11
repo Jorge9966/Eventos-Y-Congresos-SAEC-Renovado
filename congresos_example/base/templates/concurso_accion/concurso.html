@@ -116,8 +116,15 @@
     </div>
     {% include 'partials/footer.html' %}
   </div>
-  <script src="https://cdn.ckeditor.com/4.22.1/standard-all/ckeditor.js"></script>
+  {% include 'partials/ckeditor_full_toolbar.html' %}
   <script>
+    function initDescripcionConcursoPublic(){
+      const d = document.getElementById('descripcion');
+      if(!d) return;
+      if(typeof initInstructorEditor === 'function'){ initInstructorEditor('descripcion'); return; }
+      if(window.CKEDITOR){ CKEDITOR.replace('descripcion',{height:320}); return; }
+      setTimeout(initDescripcionConcursoPublic,150);
+    }
     (function(){
       function sync(){
         var ind = document.getElementById('tipo_ind');
@@ -130,10 +137,9 @@
           fG.classList.toggle('hidden', isInd);
         }
       }
-      var radios = document.querySelectorAll('input[name="tipo"]');
-      radios.forEach(function(r){ r.addEventListener('change', sync); });
+      document.querySelectorAll('input[name="tipo"]').forEach(r=> r.addEventListener('change', sync));
       sync();
-      if (window.CKEDITOR) { CKEDITOR.replace('descripcion', {height: 260}); }
+      initDescripcionConcursoPublic();
     })();
   </script>
 </body>

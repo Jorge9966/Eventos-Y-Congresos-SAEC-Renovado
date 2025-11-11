@@ -1,0 +1,355 @@
+{% load static %}
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Mi Concurso - Instructor</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@300;400;500;600&family=Playfair+Display:wght@400;600;700&display=swap" rel="stylesheet">
+  {% include '_congreso_base_styles.html' %}
+  <link rel="stylesheet" href="{% static 'base/css/instructor.css' %}">
+  {# Carga CKEditor y función initInstructorEditor al inicio para asegurar disponibilidad #}
+  {% include 'partials/ckeditor_full_toolbar.html' %}
+</head>
+<body>
+  {% include 'partials/instructor_sidebar.html' %}
+  <div class="main">
+    {% include 'partials/instructor_topbar.html' %}
+
+    {% if concurso and not creation_mode %}
+      <div class="container-fluid px-0">
+        <section class="hero-banner">
+          <div class="hero-row">
+            <div class="hero-left">
+              <h1 class="page-title">Mi Concurso</h1>
+              <div class="hero-sub"><i class="bi bi-eye"></i> Vista previa</div>
+            </div>
+            <div class="hero-right">
+              <div class="action-grid">
+                  {# Botón verde Agregar eliminado: se usa el botón dentro de la barra switcher #}
+                  <a href="{% url 'ins_concurso_editar' %}" class="btn btn-primary hero-btn-icon" title="Editar concurso" aria-label="Editar concurso"><i class="bi bi-pencil-square"></i></a>
+                  {% if request.user.is_superuser or request.user.id == congreso.admin_user_id or request.user.id == concurso.instructor_id %}
+                  <form method="post" action="{% url 'ins_concursos' %}" onsubmit="return confirm('¿Eliminar este concurso? Esta acción no se puede deshacer.');" style="margin:0; display:inline-block;">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="delete_concurso" />
+                    <input type="hidden" name="concurso_id" value="{{ concurso.id }}" />
+                    <button type="submit" class="btn btn-danger hero-btn-icon" title="Eliminar concurso" aria-label="Eliminar concurso"><i class="bi bi-trash"></i></button>
+                  </form>
+                  {% else %}
+                    <span style="width:56px; height:56px; display:inline-block;"></span>
+                  {% endif %}
+                  <a href="{% url 'ins_concurso_participantes' %}" class="btn btn-light hero-btn-icon" title="Ver lista" aria-label="Ver lista"><i class="bi bi-list-ul"></i></a>
+                </div>
+            </div>
+          </div>
+        </section>
+        <div class="resource-switcher" style="margin-left:-40px;margin-right:-40px;width:calc(100% + 80px);">
+          <div class="rs-list">
+            {% if concursos %}
+              {% for c in concursos %}
+                <a href="{% url 'ins_concursos' %}?id={{ c.id }}" class="rs-item {% if concurso and c.id == concurso.id %}active{% endif %}">{{ c.title|truncatechars:32 }}</a>
+              {% endfor %}
+            {% else %}
+              <span class="rs-empty-hint">Aún no has creado concursos.</span>
+            {% endif %}
+          </div>
+          <a href="{% url 'ins_concursos' %}?nuevo=1" class="rs-add-btn"><i class="bi bi-plus-circle"></i> Agregar Concurso</a>
+        </div>
+        <!-- Toggle removed: unified appearance across pages -->
+        <div class="px-1 pt-3 pb-4 mt-2">
+          <div class="content-wrapper">
+            <div class="title-block mt-2">
+              <div class="title-inline">
+                <h1 class="page-title mb-2 m-0"><span class="title-text">{{ concurso.title }}</span></h1>
+                {% if concurso_capacidad %}
+                  {% if concurso_inscritos < concurso_capacidad %}
+                    <span class="status-badge" style="background:#22c55e; color:#fff;">Disponible</span>
+                  {% else %}
+                    <span class="status-badge" style="background:#ef4444; color:#fff;">Agotado</span>
+                  {% endif %}
+                {% else %}
+                  <span class="status-badge" style="background:#22c55e; color:#fff;">Disponible</span>
+                {% endif %}
+              </div>
+            </div>
+
+            <div class="card-surface mt-4">
+              {% if concurso.image %}
+                <img src="{{ concurso.image.url }}" class="taller-image mb-4" alt="{{ concurso.title }}" />
+              {% endif %}
+              <div class="meta-row">
+                <div class="meta-item">
+                  <span class="meta-label">Instructor:</span>
+                  <span class="meta-value">{{ concurso.instructor.get_full_name|default:concurso.instructor.username }}</span>
+                </div>
+                {% if concurso.lugar %}
+                <div class="meta-item">
+                  <span class="meta-label">Área</span>
+                  <span class="meta-value">{{ concurso.lugar }}</span>
+                </div>
+                {% endif %}
+                {% if concurso.type == 'individual' %}
+                <div class="meta-item">
+                  <span class="meta-label">Cupo máximo</span>
+                  <span class="meta-value">{% if concurso.cupo_maximo %}{{ concurso.cupo_maximo }}{% else %}Sin límite{% endif %}</span>
+                </div>
+                {% elif concurso.type == 'grupal' %}
+                <div class="meta-item">
+                  <span class="meta-label">Equipos máximos</span>
+                  <span class="meta-value">{% if concurso.numero_equipos and concurso.max_por_equipo %}{{ concurso.numero_equipos }} de {{ concurso.max_por_equipo }}{% elif concurso.numero_equipos %}{{ concurso.numero_equipos }}{% elif concurso.max_por_equipo %}{{ concurso.max_por_equipo }}{% else %}—{% endif %}</span>
+                </div>
+                {% endif %}
+              </div>
+
+              <div class="desc-offset-left">
+                <div class="mb-3">
+                  <div class="tabs-row">
+                    <div class="btn-group" role="group">
+                      <button type="button" class="btn btn-tabs active" id="btn-info-concurso"><i class="bi bi-journal-bookmark-fill"></i> Información</button>
+                      <button type="button" class="btn btn-tabs" id="btn-alumnos-concurso"><i class="bi bi-people-fill"></i> Participantes</button>
+                    </div>
+                  </div>
+                </div>
+                <div id="concurso-info" class="description-body">
+                  {{ concurso.description|safe }}
+                </div>
+                <div id="concurso-alumnos" class="description-body" style="display:none;">
+                  <div class="participants-strip{% if not concurso.inscripciones.count %} empty{% endif %}">
+                    <div class="ps-title"><span class="ps-dash">–</span> Alumnos inscritos a este concurso</div>
+                    <div class="ps-count">{{ concurso.inscripciones.count }}{% if concurso.cupo_maximo %} / {{ concurso.cupo_maximo }}{% endif %}</div>
+                  </div>
+                  {% if concurso.inscripciones.all %}
+                    <ul class="list-group">
+                      {% for ins in concurso.inscripciones.all %}
+                        <li class="list-group-item">{{ ins.user.get_full_name|default:ins.user.username }}</li>
+                      {% endfor %}
+                    </ul>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    {% elif creation_mode %}
+      <div class="container-fluid px-0">
+        <section class="hero-banner"><h1 class="page-title">Agregar Concurso</h1></section>
+        <div class="type-band">
+          <div class="type-title"><span class="accent">Tipo de concurso</span></div>
+          <div class="type-picker">
+            <input class="type-input" type="radio" name="tipo" id="tipo_ind" value="individual" checked form="concurso-form">
+            <label class="type-option" for="tipo_ind">
+              <img src="{% static 'base/img/concurso_individual.jpg' %}" alt="Concurso individual" />
+              <span>Individual</span>
+            </label>
+            <input class="type-input" type="radio" name="tipo" id="tipo_grp" value="grupal" form="concurso-form">
+            <label class="type-option" for="tipo_grp">
+              <img src="{% static 'base/img/concurso_grupal.jpg' %}" alt="Concurso grupal" />
+              <span>Grupal</span>
+            </label>
+          </div>
+        </div>
+
+        <form id="concurso-form" class="form-card" method="post" enctype="multipart/form-data">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="create_concurso" />
+          <input type="hidden" name="action" value="create_concurso" />
+          {% if messages %}
+            {% for m in messages %}
+              {% if 'error' in m.tags or 'warning' in m.tags or 'info' in m.tags %}
+                <div class="alert alert-{% if 'error' in m.tags %}danger{% elif 'warning' in m.tags %}warning{% else %}info{% endif %}">{{ m }}</div>
+              {% endif %}
+            {% endfor %}
+          {% endif %}
+
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label" for="image">Imagen (3MB Máximo)</label>
+              <input type="file" id="image" name="image" accept="image/*" />
+              <div class="form-hint">Opcional. Tamaño máximo 3MB.</div>
+            </div>
+            <div class="col-md-8">
+              <label class="form-label">Nombre del Concurso</label>
+              <input class="form-control" type="text" name="title" placeholder="Título" required maxlength="200" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Lugar</label>
+              <input class="form-control" type="text" name="lugar" placeholder="Lugar" maxlength="200" />
+            </div>
+
+        <div id="fields_individual" class="mb-3">
+          <label class="form-label">Cupo máximo</label>
+          <input class="form-control" type="number" min="0" name="cupo" placeholder="Ej. 50" />
+        </div>
+
+            <div id="fields_grupal" class="row g-3 hidden">
+              <div class="col-12 col-md-6">
+                <label class="form-label">Número de equipos</label>
+                <input class="form-control" type="number" min="0" name="numero_equipos" placeholder="Ej. 10" />
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label">Número máximo de participantes por equipo</label>
+                <input class="form-control" type="number" min="0" name="max_por_equipo" placeholder="Ej. 5" />
+              </div>
+            </div>
+
+            <div class="col-12">
+              <label class="form-label">Descripción</label>
+              <textarea class="form-control" name="descripcion" id="descripcion" rows="8"></textarea>
+            </div>
+          </div>
+          <div class="d-flex gap-2 mt-3">
+            <button class="btn btn-primary" type="submit">Guardar Concurso</button>
+          </div>
+        </form>
+      </div>
+{% else %}
+  <div class="container-fluid px-0">
+    <section class="hero-banner"><h1 class="page-title">Agregar Concurso</h1></section>
+    <form id="concurso-form" class="form-card" method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="create_concurso" />
+      {% if messages %}
+        {% for m in messages %}
+          {% if 'error' in m.tags or 'warning' in m.tags or 'info' in m.tags %}
+            <div class="alert alert-{% if 'error' in m.tags %}danger{% elif 'warning' in m.tags %}warning{% else %}info{% endif %}">{{ m }}</div>
+          {% endif %}
+        {% endfor %}
+      {% endif %}
+      <div class="row g-3">
+        <div class="col-12">
+          <label class="form-label" for="image">Imagen (3MB Máximo)</label>
+          <input type="file" id="image" name="image" accept="image/*" />
+          <div class="form-hint">Opcional. Tamaño máximo 3MB.</div>
+        </div>
+        <div class="col-md-8">
+          <label class="form-label">Nombre del Concurso</label>
+          <input class="form-control" type="text" name="title" placeholder="Título" required maxlength="200" />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Lugar</label>
+          <input class="form-control" type="text" name="lugar" placeholder="Lugar" maxlength="200" />
+        </div>
+        <div id="fields_individual" class="mb-3">
+          <label class="form-label">Cupo máximo</label>
+          <input class="form-control" type="number" min="0" name="cupo" placeholder="Ej. 50" />
+        </div>
+        <div id="fields_grupal" class="row g-3 hidden">
+          <div class="col-12 col-md-6">
+            <label class="form-label">Número de equipos</label>
+            <input class="form-control" type="number" min="0" name="numero_equipos" placeholder="Ej. 10" />
+          </div>
+          <div class="col-12 col-md-6">
+            <label class="form-label">Número máximo de participantes por equipo</label>
+            <input class="form-control" type="number" min="0" name="max_por_equipo" placeholder="Ej. 5" />
+          </div>
+        </div>
+        <div class="col-12">
+          <label class="form-label">Descripción</label>
+          <textarea class="form-control" name="descripcion" id="descripcion" rows="8"></textarea>
+        </div>
+      </div>
+      <div class="d-flex gap-2 mt-3">
+        <button class="btn btn-primary" type="submit">Guardar Concurso</button>
+      </div>
+    </form>
+  </div>
+{% endif %}
+
+    {% include 'partials/footer.html' %}
+  </div>
+<script>
+  // Inicialización robusta: reintenta hasta que CKEditor o initInstructorEditor esté disponible
+  function initDescripcionConcurso(){
+    const d = document.getElementById('descripcion');
+    if(!d) return; // no hay campo en esta vista (modo vista, no creación)
+    if(typeof initInstructorEditor === 'function'){
+      initInstructorEditor('descripcion');
+      return;
+    }
+    if(window.CKEDITOR){
+      CKEDITOR.replace('descripcion',{height:320});
+      return;
+    }
+    // Reintentar en caso de carga lenta del CDN
+    setTimeout(initDescripcionConcurso,150);
+  }
+  document.addEventListener('DOMContentLoaded', function(){
+    // Sincroniza tipo concurso
+    function sync(){
+      var ind = document.getElementById('tipo_ind');
+      var fInd = document.getElementById('fields_individual');
+      var fG = document.getElementById('fields_grupal');
+      if(!ind || !fInd || !fG) return;
+      var isInd = ind.checked;
+      fInd.classList.toggle('hidden', !isInd);
+      fG.classList.toggle('hidden', isInd);
+    }
+    document.querySelectorAll('input[name="tipo"]').forEach(r=> r.addEventListener('change', sync));
+    sync();
+    initDescripcionConcurso();
+  });
+  // Toggle Concurso
+  (function(){
+    const bInfo = document.getElementById('btn-info-concurso');
+    const bAlu = document.getElementById('btn-alumnos-concurso');
+    const info = document.getElementById('concurso-info');
+    const alumnos = document.getElementById('concurso-alumnos');
+    if(bInfo && bAlu && info && alumnos){
+      bInfo.addEventListener('click', () => {
+        bInfo.classList.add('active'); bAlu.classList.remove('active');
+        info.style.display='block'; alumnos.style.display='none';
+      });
+      bAlu.addEventListener('click', () => {
+        bAlu.classList.add('active'); bInfo.classList.remove('active');
+        info.style.display='none'; alumnos.style.display='block';
+      });
+    }
+  })();
+  // Dynamic tabs indicator (same behavior as ins_taller)
+  (function(){
+    try {
+      const tabsRow = document.querySelector('.tabs-row');
+      if (!tabsRow) return;
+      const tabs = Array.from(tabsRow.querySelectorAll('.btn-tabs'));
+      if (!tabs.length) return;
+      const indicator = document.createElement('span');
+      indicator.className = 'tabs-indicator';
+      tabsRow.appendChild(indicator);
+      const ACTIVE_COLOR = '#374151';
+      const GLOW = '0 6px 14px rgba(55,65,81,0.08)';
+      function moveTo(button, opts={color:ACTIVE_COLOR, glow:false}){
+        const btnRect = button.getBoundingClientRect();
+        const rowRect = tabsRow.getBoundingClientRect();
+        const left = btnRect.left - rowRect.left + tabsRow.scrollLeft;
+        const width = btnRect.width;
+        indicator.style.left = left + 'px';
+        indicator.style.width = width + 'px';
+        indicator.style.background = opts.color || '#c9cdd1';
+        indicator.style.boxShadow = opts.glow ? GLOW : 'none';
+        indicator.style.borderRadius = '2px';
+      }
+      const initial = tabs.find(t => t.classList.contains('active')) || tabs[0];
+      setTimeout(()=> moveTo(initial, {color: ACTIVE_COLOR, glow:true}), 40);
+      tabs.forEach(tab => {
+        tab.addEventListener('mouseenter', ()=> moveTo(tab, {color: ACTIVE_COLOR, glow:true}));
+        tab.addEventListener('mouseleave', ()=>{
+          const current = tabs.find(t => t.classList.contains('active')) || initial;
+          moveTo(current, {color: ACTIVE_COLOR, glow:true});
+        });
+        tab.addEventListener('click', ()=>{
+          tabs.forEach(t=>t.classList.remove('active'));
+          tab.classList.add('active');
+          moveTo(tab, {color: ACTIVE_COLOR, glow:true});
+        });
+      });
+      window.addEventListener('resize', ()=>{
+        const current = tabs.find(t => t.classList.contains('active')) || initial;
+        moveTo(current, {color: ACTIVE_COLOR, glow:true});
+      });
+    } catch (err) { console.error('tabs indicator init error', err); }
+  })();
+</script>
+</body>
+</html>

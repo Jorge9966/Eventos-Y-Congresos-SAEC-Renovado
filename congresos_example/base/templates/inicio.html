@@ -77,15 +77,15 @@
         0 2px 6px rgba(0, 0, 0, .04);
     }
     /* Contenedor interno para colocar texto a la izquierda e imagen a la derecha */
-    .welcome-content{ display:flex; align-items:center; gap:28px; }
+  .welcome-content{ display:flex; align-items:center; gap:18px; }
     .welcome-body{ flex:1; min-width:0; }
-  .welcome-illustration{ flex:0 0 340px; display:flex; justify-content:flex-end; align-items:center; position:relative; }
-  /* Ajuste para logo SAEC: quepa sin mover layout */
-  .welcome-illustration img{ display:block; max-width:260px; max-height:160px; width:auto; height:auto; margin-top:0; object-fit:contain; }
+  .welcome-illustration{ flex:0 0 300px; display:flex; justify-content:flex-start; align-items:center; position:relative; margin-left:64px; }
+  /* Ajuste para logo SAEC: más grande y más cerca del texto */
+  .welcome-illustration img{ display:block; max-width:300px; max-height:180px; width:auto; height:auto; margin-top:0; object-fit:contain; }
     @media (max-width: 992px){
       .welcome-content{ flex-direction:column; align-items:flex-start; }
   .welcome-illustration{ flex:0 0 auto; width:auto; }
-  .welcome-illustration img{ max-width:200px; max-height:120px; margin-top:0; }
+  .welcome-illustration img{ max-width:220px; max-height:130px; margin-top:0; }
     }
     .welcome-title{ 
       font-weight:800; font-size:2.05rem; color:#0b5ed7; margin:0 0 14px; 
@@ -224,7 +224,7 @@
           {% endif %}
         </div>
         <div class="welcome-illustration" aria-hidden="true">
-          <img src="{% static 'base/img/SAEC.png' %}" alt="SAEC">
+          <img src="{% static 'base/img/SAEC.png' %}?v=2" alt="SAEC">
         </div>
       </div>
     </div>
