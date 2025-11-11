@@ -12,8 +12,6 @@ coverage.xml
 db.sqlite3
 /congresos_example/db.sqlite3
 /staticfiles/
-media/
-/congresos_example/media/
 *.log
 
 # Environments
