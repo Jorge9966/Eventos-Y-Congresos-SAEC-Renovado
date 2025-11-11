@@ -84,6 +84,12 @@ DATABASES = {
         'PASSWORD': 'root',   # tu contraseña de MySQL
         'HOST': 'localhost',         # o la IP del servidor MySQL
         'PORT': '3306',              # puerto por defecto de MySQL
+        # Opciones para forzar charset/collation compatibles en versiones < MySQL 8
+        'OPTIONS': {
+            'charset': 'utf8mb4',
+            # Ajusta la collation de la conexión a una soportada ampliamente (MySQL 5.7 / MariaDB)
+            'init_command': "SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci"
+        }
     }
 }
 
