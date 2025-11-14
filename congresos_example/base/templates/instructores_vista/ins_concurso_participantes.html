@@ -1,4 +1,4 @@
-{% load static %}
+{% load static extra_filters %}
 <!doctype html>
 <html lang="es">
 <head>
@@ -19,7 +19,7 @@
         <div class="d-flex align-items-start justify-content-between">
           <h2 class="hero-title me-3 flex-grow-1" style="font-size:1.6rem;">{{ concurso.title }}</h2>
           <div class="d-grid gap-2" style="min-width:220px;">
-            <a href="#" class="btn btn-dark btn-lg w-100" aria-label="Imprimir" title="Imprimir">
+            <a href="{% url 'concurso_participantes_print' congreso.id concurso.id %}" class="btn btn-dark btn-lg w-100" aria-label="Imprimir" title="Imprimir" target="_blank" rel="noopener">
               <i class="bi bi-printer"></i>
               <span class="visually-hidden">Imprimir</span>
             </a>
@@ -27,6 +27,16 @@
         </div>
       </div>
     </section>
+      {# Mensajes de éxito del módulo concursos #}
+      {% if messages %}
+        <div class="container-fluid px-0">
+          {% for m in messages %}
+            {% if 'concurso' in m.tags and 'success' in m.tags %}
+              <div class="alert alert-success">{{ m }}</div>
+            {% endif %}
+          {% endfor %}
+        </div>
+      {% endif %}
     <div class="container-fluid" style="padding-left:0; padding-right:0;">
       <div class="panel"><div class="panel-header"><span class="panel-title-blue">Participantes inscritos al concurso</span></div>
         <div class="panel-body">
@@ -36,10 +46,14 @@
                 <thead>
                   <tr>
                     <th>Nombre</th>
-                    <th>Matrícula</th>
+                    <th>Correo</th>
+                    <th>Nivel de desempeño</th>
                     {% if concurso.type == 'grupal' %}
                       <th>Equipo</th>
                     {% endif %}
+                    {% for f in extra_fields %}
+                      <th>{{ f.name }}</th>
+                    {% endfor %}
                     <th class="text-end">Quitar</th>
                   </tr>
                 </thead>
@@ -47,10 +61,16 @@
                   {% for ins in inscripciones %}
                     <tr>
                       <td>{{ ins.user.get_full_name|default:ins.user.username }}</td>
-                      <td>{{ ins.user.username }}</td>
+                      <td>{{ ins.user.email|default:ins.user.username }}</td>
+                      <td>{{ ins.performance_level.name|default:'—' }}</td>
                       {% if concurso.type == 'grupal' %}
                         <td>{{ ins.team_name|default:'—' }}</td>
                       {% endif %}
+                      {% for f in extra_fields %}
+                        {% with val=extra_values_by_user|get_item:ins.user_id|get_item:f.id %}
+                          <td>{{ val|default:'' }}</td>
+                        {% endwith %}
+                      {% endfor %}
                       <td class="text-end">
                         {% if puede_remover %}
                         <form method="post" style="display:inline;" onsubmit="return confirm('¿Quitar participante de este concurso?');">

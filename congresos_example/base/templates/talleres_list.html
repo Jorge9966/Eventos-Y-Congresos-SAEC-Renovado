@@ -15,11 +15,7 @@
   .work-thumb{ width:100%; height:200px; object-fit:contain; background:#fff; border-radius:10px; display:block; }
     .work-title{ font-weight:800; font-size:1.4rem; color:#0b1730; line-height:1.25; margin:12px 0; transition:color .2s ease; }
     .work-meta{ color:#475569; font-size:1rem; }
-    .desc-line{
-      margin-top:8px; color:#ffffff; font-size:.9rem; line-height:1.25; white-space:normal;
-      display:inline-block; background:#0b1730; border:1px solid #0b1730; border-radius:999px;
-      padding:6px 12px; box-shadow: 0 1px 3px rgba(15,23,42,0.12);
-    }
+    .desc-line{margin-top:8px;color:#0b1730;font-size:.9rem;line-height:1.25;white-space:normal;display:inline-block;background:transparent;border:none;border-radius:8px;padding:0;font-weight:600;box-shadow:none;}
     .work-divider{ height:1px; background:#eef2f7; margin:12px 0; }
     .stat{ color:#64748b; font-size:.9rem; display:flex; align-items:center; gap:6px; }
     .status-badge{ background:#22c55e; color:#fff; border-radius:24px; padding:4px 12px; font-weight:600; font-size:.85rem; }
@@ -37,7 +33,7 @@
       <div class="container-fluid d-flex align-items-center justify-content-between px-0">
         <h1 class="hero-title">Talleres</h1>
         <div class="d-flex gap-2">
-          <a href="#" class="btn btn-light" aria-label="Descargar reporte" title="Descargar reporte"><i class="bi bi-download"></i></a>
+          <a href="{% url 'talleres_export' congreso.id %}" class="btn btn-light" aria-label="Descargar reporte" title="Descargar reporte"><i class="bi bi-download"></i></a>
           <a href="{% url 'taller_nuevo' congreso.id %}" class="btn btn-primary" aria-label="Agregar taller" title="Agregar taller"><i class="bi bi-plus-lg"></i></a>
         </div>
       </div>
@@ -74,7 +70,7 @@
             <div class="work-divider"></div>
             <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
               <div class="stat"><i class="bi bi-people"></i>
-                0 participantes de {{ t.cupo_maximo|default:35 }}
+                {{ t.inscripciones.count }} participantes de {{ t.cupo_maximo|default:'—' }}
               </div>
               <span class="status-badge">Disponible</span>
             </div>

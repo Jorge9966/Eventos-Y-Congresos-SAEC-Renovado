@@ -17,6 +17,17 @@
   <div class="main">
     {% include 'partials/instructor_topbar.html' %}
 
+    {# Mensajes específicos de concursos (éxitos) #}
+    {% if messages %}
+      <div class="container-fluid px-0" style="max-width:1200px;">
+        {% for m in messages %}
+          {% if 'concurso' in m.tags and 'success' in m.tags %}
+            <div class="alert alert-success" style="margin:16px 0 0 0;">{{ m }}</div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
+
     {% if concurso and not creation_mode %}
       <div class="container-fluid px-0">
         <section class="hero-banner">
@@ -28,7 +39,7 @@
             <div class="hero-right">
               <div class="action-grid">
                   {# Botón verde Agregar eliminado: se usa el botón dentro de la barra switcher #}
-                  <a href="{% url 'ins_concurso_editar' %}" class="btn btn-primary hero-btn-icon" title="Editar concurso" aria-label="Editar concurso"><i class="bi bi-pencil-square"></i></a>
+                  <a href="{% url 'ins_concurso_editar' %}?id={{ concurso.id }}" class="btn btn-primary hero-btn-icon" title="Editar concurso" aria-label="Editar concurso"><i class="bi bi-pencil-square"></i></a>
                   {% if request.user.is_superuser or request.user.id == congreso.admin_user_id or request.user.id == concurso.instructor_id %}
                   <form method="post" action="{% url 'ins_concursos' %}" onsubmit="return confirm('¿Eliminar este concurso? Esta acción no se puede deshacer.');" style="margin:0; display:inline-block;">
                     {% csrf_token %}
@@ -39,7 +50,7 @@
                   {% else %}
                     <span style="width:56px; height:56px; display:inline-block;"></span>
                   {% endif %}
-                  <a href="{% url 'ins_concurso_participantes' %}" class="btn btn-light hero-btn-icon" title="Ver lista" aria-label="Ver lista"><i class="bi bi-list-ul"></i></a>
+                  <a href="{% url 'ins_concurso_participantes' %}?id={{ concurso.id }}" class="btn btn-light hero-btn-icon" title="Ver lista" aria-label="Ver lista"><i class="bi bi-list-ul"></i></a>
                 </div>
             </div>
           </div>
@@ -119,12 +130,43 @@
                     <div class="ps-title"><span class="ps-dash">–</span> Alumnos inscritos a este concurso</div>
                     <div class="ps-count">{{ concurso.inscripciones.count }}{% if concurso.cupo_maximo %} / {{ concurso.cupo_maximo }}{% endif %}</div>
                   </div>
-                  {% if concurso.inscripciones.all %}
-                    <ul class="list-group">
-                      {% for ins in concurso.inscripciones.all %}
-                        <li class="list-group-item">{{ ins.user.get_full_name|default:ins.user.username }}</li>
-                      {% endfor %}
-                    </ul>
+                  {% if participantes_rows %}
+                    <div class="table-responsive">
+                      <table class="table table-striped align-middle">
+                        <thead>
+                          <tr>
+                            <th>Nombre</th>
+                            <th>Correo</th>
+                            <th>Nivel de desempeño</th>
+                            {% if concurso.type == 'grupal' %}
+                              <th>Equipo</th>
+                            {% endif %}
+                            {% for f in extra_fields %}
+                              <th>{{ f.name }}</th>
+                            {% endfor %}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {% for row in participantes_rows %}
+                            {% with ins=row.ins %}
+                            <tr>
+                              <td>{{ ins.user.get_full_name|default:ins.user.username }}</td>
+                              <td>{{ ins.user.email|default:ins.user.username }}</td>
+                              <td>{{ ins.performance_level.name|default:'—' }}</td>
+                              {% if concurso.type == 'grupal' %}
+                                <td>{{ ins.team_name|default:'—' }}</td>
+                              {% endif %}
+                              {% for val in row.values_ordered %}
+                                <td>{{ val|default:'' }}</td>
+                              {% endfor %}
+                            </tr>
+                            {% endwith %}
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    </div>
+                  {% else %}
+                    <div class="empty">Aún no hay participantes registrados para este concurso.</div>
                   {% endif %}
                 </div>
               </div>

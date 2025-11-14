@@ -73,7 +73,7 @@
         <div class="hero-right">
           <div class="action-grid">
             {# Botón verde Agregar eliminado: se usa el botón dentro de la barra switcher #}
-            <a href="{% url 'ins_conferencia_editar' %}" class="btn btn-primary hero-btn-icon" title="Editar conferencia" aria-label="Editar conferencia"><i class="bi bi-pencil-square"></i></a>
+            <a href="{% url 'ins_conferencia_editar' %}?id={{ conferencia.id }}" class="btn btn-primary hero-btn-icon" title="Editar conferencia" aria-label="Editar conferencia"><i class="bi bi-pencil-square"></i></a>
             {% if request.user.is_superuser or request.user.id == congreso.admin_user_id or request.user.id == conferencia.instructor_id %}
             <form method="post" action="{% url 'ins_conferencias' %}" onsubmit="return confirm('¿Eliminar esta conferencia? Esta acción no se puede deshacer.');" style="margin:0; display:inline-block;">
               {% csrf_token %}
@@ -84,7 +84,7 @@
             {% else %}
               <span style="width:56px; height:56px; display:inline-block;"></span>
             {% endif %}
-            <a href="{% url 'ins_conferencia_participantes' %}" class="btn btn-light hero-btn-icon" title="Ver lista" aria-label="Ver lista"><i class="bi bi-list-ul"></i></a>
+            <a href="{% url 'ins_conferencia_participantes' %}?id={{ conferencia.id }}" class="btn btn-light hero-btn-icon" title="Ver lista" aria-label="Ver lista"><i class="bi bi-list-ul"></i></a>
           </div>
         </div>
       </div>
@@ -151,17 +151,42 @@
               {{ conferencia.description|safe }}
             </div>
             <div id="conferencia-alumnos" class="description-body" style="display:none;">
-            <div class="participants-strip{% if not conferencia.inscripciones.count %} empty{% endif %}">
-              <div class="ps-title"><span class="ps-dash">–</span> Alumnos inscritos a esta conferencia</div>
-              <div class="ps-count">{{ conferencia.inscripciones.count }}{% if conferencia.cupo_maximo %} / {{ conferencia.cupo_maximo }}{% endif %}</div>
-            </div>
-            {% if conferencia.inscripciones.all %}
-              <ul class="list-group">
-                {% for ins in conferencia.inscripciones.all %}
-                  <li class="list-group-item">{{ ins.user.get_full_name|default:ins.user.username }}</li>
-                {% endfor %}
-              </ul>
-            {% endif %}
+              <div class="participants-strip{% if not conferencia.inscripciones.count %} empty{% endif %}">
+                <div class="ps-title"><span class="ps-dash">–</span> Alumnos inscritos a esta conferencia</div>
+                <div class="ps-count">{{ conferencia.inscripciones.count }}{% if conferencia.cupo_maximo %} / {{ conferencia.cupo_maximo }}{% endif %}</div>
+              </div>
+              {% if participantes_rows %}
+                <div class="table-responsive">
+                  <table class="table table-striped align-middle">
+                    <thead>
+                      <tr>
+                        <th>Nombre</th>
+                        <th>Correo</th>
+                        <th>Nivel de desempeño</th>
+                        {% for f in extra_fields %}
+                          <th>{{ f.name }}</th>
+                        {% endfor %}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for row in participantes_rows %}
+                        {% with ins=row.ins %}
+                        <tr>
+                          <td>{{ ins.user.get_full_name|default:ins.user.username }}</td>
+                          <td>{{ ins.user.email|default:ins.user.username }}</td>
+                          <td>{{ ins.performance_level.name|default:'—' }}</td>
+                          {% for val in row.values_ordered %}
+                            <td>{{ val|default:'' }}</td>
+                          {% endfor %}
+                        </tr>
+                        {% endwith %}
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              {% else %}
+                <div class="empty">Aún no hay participantes registrados para esta conferencia.</div>
+              {% endif %}
             </div>
           </div>
         </div>

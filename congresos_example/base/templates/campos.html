@@ -139,6 +139,7 @@
               <th><span class="es-blue">Visible para</span></th>
               <th><span class="es-blue">Requerido</span></th>
               <th><span class="es-blue">Activo</span></th>
+              <th><span class="es-blue">Irrepetible</span></th>
               <th class="col-actions"><span class="es-blue">Acción</span></th>
             </tr>
           </thead>
@@ -150,6 +151,7 @@
                   <td>{{ f.get_role_scope_display }}</td>
                   <td>{{ f.required|yesno:"Sí,No" }}</td>
                   <td>{{ f.active|yesno:"Sí,No" }}</td>
+                  <td>{{ f.unique_value|yesno:"Sí,No" }}</td>
                   <td>
                     <a class="action-btn" title="Editar" href="{% url 'campos' %}?c={{ congreso.id }}&edit={{ f.id }}"><i class="bi bi-pencil"></i></a>
                     <form method="post" style="display:inline-block" onsubmit="return confirm('¿Eliminar campo?');">
@@ -164,7 +166,7 @@
               {% endfor %}
             {% else %}
               <tr>
-                <td colspan="5" style="text-align:center; color:#64748b; padding:26px;">No hay campos definidos para este congreso.</td>
+                <td colspan="6" style="text-align:center; color:#64748b; padding:26px;">No hay campos definidos para este congreso.</td>
               </tr>
             {% endif %}
           </tbody>
@@ -215,6 +217,10 @@
             <input class="form-check-input" type="checkbox" id="activeCheck" name="active" {% if edit_field.active %}checked{% endif %}>
             <label class="form-check-label" for="activeCheck">Activo</label>
           </div>
+          <div class="col-6 col-md-3 form-check d-flex align-items-center" style="padding-left:2.2rem;">
+            <input class="form-check-input" type="checkbox" id="uniqueCheck" name="unique_value" {% if edit_field.unique_value %}checked{% endif %}>
+            <label class="form-check-label" for="uniqueCheck">Irrepetible</label>
+          </div>
           <!-- Row 3: Botones -->
           <div class="col-12" style="display:flex; gap:8px;">
             <button class="btn btn-primary" type="submit">Actualizar</button>
@@ -247,6 +253,10 @@
           <div class="col-6 col-md-3 form-check d-flex align-items-center" style="padding-left:2.2rem;">
             <input class="form-check-input" type="checkbox" id="activeCheck" name="active" checked>
             <label class="form-check-label" for="activeCheck">Activo</label>
+          </div>
+          <div class="col-6 col-md-3 form-check d-flex align-items-center" style="padding-left:2.2rem;">
+            <input class="form-check-input" type="checkbox" id="uniqueCheckNew" name="unique_value">
+            <label class="form-check-label" for="uniqueCheckNew">Irrepetible</label>
           </div>
           <!-- Row 3: Botón Guardar -->
           <div class="col-12">

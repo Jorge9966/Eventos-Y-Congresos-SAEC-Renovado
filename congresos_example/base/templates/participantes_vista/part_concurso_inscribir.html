@@ -5,25 +5,108 @@
   <title>Concurso | Inscripción</title>
   {% load static extra_filters %}
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@300;400;500;600&family=Playfair+Display:wght@400;600;700&display=swap" rel="stylesheet">
+  {% include '_congreso_base_styles.html' %}
   <style>
-    body{margin:0;font-family:'Inter',Arial,Helvetica,sans-serif;background:#f1f5f9;}
+    body{margin:0;font-family:'Inter',Arial,Helvetica,sans-serif;background:#f1f5f9;overflow:auto;}
     .hero{background:linear-gradient(rgba(11,94,215,.82),rgba(11,94,215,.82)), url('{% static "base/img/bloggrid-heading-bg.jpg" %}') center/cover no-repeat;padding:46px 30px;text-align:center;}
     .hero h1{color:#fff;font-size:2.2rem;font-weight:800;letter-spacing:.5px;margin:0;}
     .wrap{max-width:1050px;margin:30px auto 70px;padding:0 40px;}
     .card-main{background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 1px 2px rgba(0,0,0,.04);overflow:hidden;}
-    .banner-img{width:100%;height:280px;object-fit:cover;background:#e2e8f0;}
+    .banner-img{width:100%;height:auto;display:block;background:#e2e8f0;}
     .content{padding:26px 30px;}
-    h2.title{font-size:1.6rem;font-weight:800;color:#0b1730;margin:0 0 14px;}
-    .desc{font-size:.95rem;line-height:1.5;color:#334155;margin-bottom:18px;white-space:pre-line;}
-    .meta{display:flex;flex-wrap:wrap;gap:16px;font-size:.8rem;color:#475569;margin-bottom:18px;}
-    .badge-soft{background:#eff6ff;color:#0b5ed7;font-weight:600;padding:6px 10px;border-radius:8px;font-size:.72rem;border:1px solid #bfdbfe;}
-    .enroll-box{background:#f8fafc;border:1px solid #e2e8f0;padding:18px 20px;border-radius:12px;margin-top:8px;}
-    .enroll-btn{display:inline-block;background:#0b5ed7;color:#fff;text-decoration:none;font-weight:700;padding:12px 24px;border-radius:10px;box-shadow:0 2px 4px rgba(0,0,0,.12);}
+    h2.title{font-size:clamp(1.9rem,3.8vw,2.6rem);line-height:1.15;letter-spacing:.2px;font-weight:800;color:#0b1730;margin:0 0 14px;display:inline-block;background-image:linear-gradient(transparent 65%, rgba(11,94,215,.18) 0);background-size:100% 100%;background-repeat:no-repeat;}
+    .meta-row{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px;flex-wrap:wrap;}
+    .meta{display:flex;flex-wrap:wrap;gap:18px;font-size:.9rem;color:#475569;}
+    .meta-item{display:flex;gap:6px;align-items:center;}
+    .meta-label{font-weight:700;color:#0b1730;}
+    .meta-value{color:#334155;}
+    .enroll-btn{display:inline-block;background:#0b5ed7;color:#fff;text-decoration:none;font-weight:700;padding:10px 18px;border-radius:10px;box-shadow:0 2px 4px rgba(0,0,0,.12);} 
     .enroll-btn:hover{background:#094ba8;}
     .enroll-btn.disabled{background:#94a3b8;pointer-events:none;}
-    .status-msg{font-size:.8rem;color:#475569;margin-top:8px;}
+    /* Tabs styled like instructor */
+    .tabs-row{position:relative;border-bottom:1px solid #e6ebf2;padding-bottom:8px;margin-top:28px;margin-bottom:18px;}
+    .btn-tabs{background:transparent;border-radius:999px;padding:8px 14px;border:1px solid transparent;color:#6b7280;font-weight:600;transition:all .18s ease;display:inline-flex;align-items:center;gap:8px;margin-right:8px;}
+    .btn-tabs:hover{transform:translateY(-3px);color:#374151;}
+    .btn-tabs.active{color:#374151;background:rgba(55,65,81,0.04);border-color:rgba(55,65,81,0.06);}    
+    .description-body{font-size:.95rem;line-height:1.55;color:#334155;margin-top:10px;}
+    /* Participants strip like instructor */
+    .participants-strip{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:22px 32px;background:#ffffff;border:none;border-bottom:2px solid #d5dbe5;border-radius:0;box-shadow:none;font-size:1.2rem;font-weight:400;margin-top:10px;position:relative;}
+    .participants-strip.empty{opacity:.85;}
+    .participants-strip .ps-title{color:#1d4ed8;font-weight:400;letter-spacing:.2px;display:flex;align-items:center;gap:6px;}
+    .participants-strip .ps-dash{font-weight:600;margin-right:6px;font-size:1.2rem;}
+    .participants-strip .ps-count{color:#1d4ed8;font-weight:500;font-variant-numeric:tabular-nums;letter-spacing:.3px;}
+    .next-hint{margin-top:14px;font-size:.9rem;color:#334155;}
+    .next-hint a{font-weight:700;color:#0b5ed7;text-decoration:none;}
+    .next-hint a:hover{text-decoration:underline;}
+    /* Tabs indicator like instructor */
+    .tabs-indicator{position:absolute;bottom:-2px;height:2px;background:#111827 !important;border-radius:2px;transition:left .22s cubic-bezier(.22,.9,.28,1), width .22s cubic-bezier(.22,.9,.28,1);pointer-events:none;box-shadow:0 0 0 1px rgba(17,24,39,0.15);}   
+    /* Details grid like instructor view */
+    .details-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;margin:10px 0 6px;align-items:flex-start;}
+    .det-col{padding-left:18px;border-left:1px solid #e5e7eb;}
+    .det-col:first-child{border-left:none;padding-left:0;}
+    .det-label{font-weight:700;color:#6b7280;margin-bottom:6px;}
+    .det-value{font-family:'Playfair Display',serif;font-size:2rem;color:#0b1730;}
+    /* Prev/Next nav prominence */
+    .nav-steps{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px;padding-top:12px;border-top:1px solid #e5e7eb;}
+    .nav-step{font-weight:700;border-radius:999px;padding:10px 16px;}
   </style>
+  <script>
+    document.addEventListener('DOMContentLoaded', function(){
+      const btnDesc = document.getElementById('btn-desc');
+      const btnList = document.getElementById('btn-list');
+      const secDesc = document.getElementById('sec-desc');
+      const secList = document.getElementById('sec-list');
+      if(btnDesc && btnList && secDesc && secList){
+        btnDesc.addEventListener('click', ()=>{btnDesc.classList.add('active');btnList.classList.remove('active');secDesc.style.display='block';secList.style.display='none';});
+        btnList.addEventListener('click', ()=>{btnList.classList.add('active');btnDesc.classList.remove('active');secDesc.style.display='none';secList.style.display='block';});
+      }
+    });
+  </script>
+  <script>
+    // Indicator animation identical to instructor page
+    document.addEventListener('DOMContentLoaded', function(){
+      try {
+        const tabsRow = document.querySelector('.tabs-row');
+        if (!tabsRow) return;
+        const tabs = Array.from(tabsRow.querySelectorAll('.btn-tabs'));
+        if (!tabs.length) return;
+
+        const indicator = document.createElement('span');
+        indicator.className = 'tabs-indicator';
+        tabsRow.appendChild(indicator);
+
+        const ACTIVE_COLOR = '#111827';
+        const INACTIVE_COLOR = '#c9cdd1';
+        const GLOW = '0 6px 14px rgba(17,24,39,0.18)';
+
+        function moveTo(button, opts={color:ACTIVE_COLOR, glow:true}){
+          const btnRect = button.getBoundingClientRect();
+          const rowRect = tabsRow.getBoundingClientRect();
+          const left = btnRect.left - rowRect.left + tabsRow.scrollLeft;
+          indicator.style.left = left + 'px';
+          indicator.style.width = btnRect.width + 'px';
+          indicator.style.background = opts.color || INACTIVE_COLOR;
+          indicator.style.boxShadow = opts.glow ? GLOW : 'none';
+        }
+
+        const initial = tabs.find(t => t.classList.contains('active')) || tabs[0];
+        setTimeout(()=> moveTo(initial, {color: ACTIVE_COLOR, glow:true}), 40);
+
+        tabs.forEach(tab => {
+          tab.addEventListener('mouseenter', ()=> moveTo(tab, {color: ACTIVE_COLOR, glow:true}));
+          tab.addEventListener('mouseleave', ()=> moveTo(tabs.find(t=>t.classList.contains('active'))||initial, {color: ACTIVE_COLOR, glow:true}));
+          tab.addEventListener('click', ()=> {
+            tabs.forEach(t=>t.classList.remove('active'));
+            tab.classList.add('active');
+            moveTo(tab, {color: ACTIVE_COLOR, glow:true});
+          });
+        });
+        window.addEventListener('resize', ()=> moveTo(tabs.find(t=>t.classList.contains('active'))||initial, {color: ACTIVE_COLOR, glow:true}));
+      } catch(e) { console.warn('tabs indicator error', e); }
+    });
+  </script>
 </head>
 <body>
   {% include 'partials/participante_topbar.html' %}
@@ -32,36 +115,271 @@
   </header>
   <main class="wrap">
     <article class="card-main">
+      <div class="content">
+        <h2 class="title">{{ concurso.title }}</h2>
+      </div>
       {% if concurso.image %}
         <img class="banner-img" src="{{ concurso.image.url }}" alt="{{ concurso.title }}">
       {% else %}
         <img class="banner-img" src="{% static 'base/img/bloggrid-heading-bg.jpg' %}" alt="{{ concurso.title }}">
       {% endif %}
       <div class="content">
-        <h2 class="title">{{ concurso.title }}</h2>
-        <div class="meta">
-          {% if concurso.type == 'individual' %}
-            <span class="badge-soft">Inscritos: {{ inscritos }}{% if capacidad %} de {{ capacidad }}{% endif %}</span>
-            <span class="badge-soft">Tipo: Individual</span>
-          {% else %}
-            <span class="badge-soft">Equipos: {{ equipos_inscritos|default:0 }}{% if concurso.numero_equipos %} de {{ concurso.numero_equipos }}{% endif %}</span>
-            <span class="badge-soft">Tipo: Grupal</span>
-            <span class="badge-soft">Equipos: {{ concurso.numero_equipos|default:'—' }} · Máx/Integrantes: {{ concurso.max_por_equipo|default:'—' }}</span>
-          {% endif %}
-          {% if concurso.lugar %}<span class="badge-soft">Lugar: {{ concurso.lugar }}</span>{% endif %}
+        <div class="meta-row">
+          <div class="meta">
+            {% if concurso.type == 'individual' %}
+              <div class="meta-item"><span class="meta-label">Cupos:</span><span class="meta-value">{{ inscritos|default:0 }}{% if capacidad %} / {{ capacidad }}{% else %} / —{% endif %}</span></div>
+            {% else %}
+              <div class="meta-item"><span class="meta-label">Equipos:</span><span class="meta-value">{{ equipos_inscritos|default:0 }}{% if concurso.numero_equipos %} / {{ concurso.numero_equipos }}{% else %} / —{% endif %}</span></div>
+              <div class="meta-item small"><span class="meta-label">Integrantes por equipo:</span><span class="meta-value">{{ concurso.max_por_equipo|default:'—' }}</span></div>
+            {% endif %}
+          </div>
+          <div>
+            {% if ya_inscrito %}
+              <span class="btn btn-success disabled" aria-disabled="true">Ya inscrito en este concurso</span>
+            {% elif otro_concurso_inscrito %}
+              <span class="btn btn-secondary disabled" aria-disabled="true">Ya inscrito en otro concurso</span>
+            {% elif not approved %}
+              <span class="btn btn-secondary disabled" aria-disabled="true">Inscribirme</span>
+            {% elif concurso.type == 'individual' and capacidad and inscritos|default:0 >= capacidad %}
+              <span class="btn btn-secondary disabled" aria-disabled="true">Cupo lleno</span>
+            {% elif concurso.type == 'grupal' and capacidad and inscritos|default:0 >= capacidad %}
+              <span class="btn btn-secondary disabled" aria-disabled="true">Cupo lleno</span>
+            {% else %}
+              {% if concurso.type == 'individual' %}
+                <form method="post" style="display:inline;">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="enroll_concurso" />
+                  <button type="submit" class="btn btn-primary">Inscribirme</button>
+                </form>
+              {% else %}
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#teamModal">Inscribirse</button>
+              {% endif %}
+            {% endif %}
+          </div>
         </div>
-        <div class="desc">{{ concurso.description|default:"Sin descripción" }}</div>
-        <div class="enroll-box">
-          {% if ya_inscrito %}
-            <div class="status-msg">Ya estás inscrito en este concurso.</div>
-          {% elif not approved %}
-            <div class="status-msg">Tu membresía aún no está aprobada. No puedes inscribirte.</div>
-          {% else %}
-            <a class="enroll-btn" href="#" onclick="alert('Inscripción pendiente de implementar backend.');return false;">Inscribirme</a>
-            <div class="status-msg">Completa tu inscripción. (Acción backend pendiente)</div>
+        <div class="details-grid">
+          <div class="det-col">
+            <div class="det-label">Instructor:</div>
+            <div class="det-value">
+              {% with i=concurso.instructor %}
+                {% if i %}
+                  {% if i.first_name or i.last_name %}
+                    {{ i.first_name }} {{ i.last_name }}
+                  {% else %}
+                    {{ i.username }}
+                  {% endif %}
+                {% else %}—{% endif %}
+              {% endwith %}
+            </div>
+          </div>
+          <div class="det-col">
+            <div class="det-label">Área</div>
+            <div class="det-value">{% if concurso.lugar %}{{ concurso.lugar }}{% else %}—{% endif %}</div>
+          </div>
+          <div class="det-col">
+            <div class="det-label">{% if concurso.es_grupal %}Equipos{% else %}Cupo{% endif %}</div>
+            <div class="det-value">
+              {% if concurso.es_grupal %}
+                {% if concurso.numero_equipos_maximo %}{{ concurso.numero_equipos_maximo }}{% else %}—{% endif %}
+              {% else %}
+                {% if capacidad %}{{ capacidad }}{% else %}—{% endif %}
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        <div class="tabs-row">
+          <div class="btn-group" role="group">
+            <button id="btn-desc" class="btn btn-tabs active" type="button"><i class="bi bi-journal-bookmark-fill"></i> Descripción</button>
+            <button id="btn-list" class="btn btn-tabs" type="button"><i class="bi bi-people-fill"></i> Participantes</button>
+          </div>
+        </div>
+        <div id="sec-desc" class="description-body">{{ concurso.description|default:"Sin descripción"|safe }}</div>
+        <div id="sec-list" class="description-body" style="display:none;">
+          <div class="participants-strip{% if not concurso.inscripciones.count %} empty{% endif %}">
+            <div class="ps-title"><span class="ps-dash">–</span> Participantes inscritos</div>
+            {% if concurso.type == 'individual' %}
+              <div class="ps-count">{{ concurso.inscripciones.count }}{% if capacidad %} / {{ capacidad }}{% endif %}</div>
+            {% else %}
+              <div class="ps-count">{{ equipos_inscritos|default:0 }}{% if concurso.numero_equipos %} / {{ concurso.numero_equipos }}{% endif %}</div>
+            {% endif %}
+          </div>
+          {% if participantes_rows %}
+            <div class="table-responsive mt-3">
+              <table class="table table-striped align-middle">
+                <thead>
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Correo</th>
+                    <th>Nivel</th>
+                    {% if concurso.type == 'grupal' %}
+                      <th>Equipo</th>
+                    {% endif %}
+                    {% for f in extra_fields %}
+                      <th>{{ f.name }}</th>
+                    {% endfor %}
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in participantes_rows %}
+                    {% with ins=row.ins %}
+                      <tr>
+                        <td>{{ ins.user.get_full_name|default:ins.user.username }}</td>
+                        <td>{{ ins.user.email }}</td>
+                        <td>{% if ins.performance_level %}{{ ins.performance_level.name }}{% else %}—{% endif %}</td>
+                        {% if concurso.type == 'grupal' %}
+                          <td>{{ row.team_name|default:"" }}</td>
+                        {% endif %}
+                        {% for v in row.values_ordered %}
+                          <td>{{ v|default:"" }}</td>
+                        {% endfor %}
+                      </tr>
+                    {% endwith %}
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
           {% endif %}
+        </div>
+        <div class="nav-steps">
+          <div>
+            {% if prev_concurso %}
+              <a class="btn btn-dark nav-step prev" href="{% url 'part_concurso_inscribir' prev_concurso.id %}"><i class="bi bi-arrow-left"></i> Ir al concurso anterior</a>
+            {% else %}
+              <a class="btn btn-outline-secondary nav-step prev disabled" href="#" onclick="return false;"><i class="bi bi-arrow-left"></i> Ir al concurso anterior</a>
+            {% endif %}
+          </div>
+          <div>
+            {% if next_concurso %}
+              <a class="btn btn-primary nav-step next" href="{% url 'part_concurso_inscribir' next_concurso.id %}">Ir al siguiente concurso <i class="bi bi-arrow-right"></i></a>
+            {% else %}
+              <a class="btn btn-outline-secondary nav-step next disabled" href="#" onclick="return false;">Ir al siguiente concurso <i class="bi bi-arrow-right"></i></a>
+            {% endif %}
+          </div>
         </div>
       </div>
+      {% if concurso.type == 'grupal' and approved and not ya_inscrito and not otro_concurso_inscrito %}
+        {% if capacidad and inscritos|default:0 >= capacidad %}
+          {# Capacidad llena: no mostrar modal de inscripción #}
+        {% else %}
+          <div class="modal fade" id="teamModal" tabindex="-1" aria-labelledby="teamModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-centered">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h5 class="modal-title" id="teamModalLabel">Inscribir equipo</h5>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                  <form method="post" id="team-enroll-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="enroll_concurso" />
+                    <div class="mb-3">
+                      <label class="form-label">Nombre del equipo</label>
+                      <input type="text" name="team_name" class="form-control" placeholder="Ej. Los Innovadores" required />
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label">Integrante #1 (Jefe de equipo)</label>
+                      <input type="text" class="form-control" value="{{ request.user.get_full_name|default:request.user.username }} ({{ request.user.email }})" disabled />
+                    </div>
+                    {% for slot in team_slots %}
+                      <div class="mb-3">
+                        <label class="form-label">Integrante #{{ slot }}</label>
+                        <select name="team_member_{{ slot }}" class="form-select team-member-select">
+                          <option value="">Sin integrante</option>
+                          {% for p in equipo_participantes %}
+                            <option value="{{ p.id }}">{{ p.display }}</option>
+                          {% endfor %}
+                        </select>
+                      </div>
+                    {% endfor %}
+                    {% if max_integrantes_equipo %}
+                      <div class="form-text">Máximo participantes por equipo: {{ max_integrantes_equipo }} (incluyéndote).</div>
+                    {% endif %}
+                    {% if min_integrantes_equipo %}
+                      <div class="form-text">Tamaño fijo de equipo: {{ min_integrantes_equipo }} participantes (debes completar todos los campos).</div>
+                    {% endif %}
+                  </form>
+                </div>
+                <div class="modal-footer">
+                  <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                  <button type="submit" form="team-enroll-form" class="btn btn-primary" id="team-submit">Guardar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <script>
+            (function(){
+              var selects = document.querySelectorAll('#team-enroll-form .team-member-select');
+              var submitBtn = document.getElementById('team-submit');
+              if(!submitBtn) return;
+              var minAdditional = {{ required_integrantes_adicionales }}; // ahora todos los adicionales son obligatorios
+              function validate(){
+                var values = [];
+                var valid = true;
+                selects.forEach(function(sel){
+                  var v = sel.value;
+                  if(v){
+                    if(values.includes(v)){
+                      sel.classList.add('is-invalid');
+                      valid = false;
+                    } else {
+                      sel.classList.remove('is-invalid');
+                      values.push(v);
+                    }
+                  } else {
+                    sel.classList.remove('is-invalid');
+                  }
+                });
+                if(values.length !== minAdditional){
+                  valid = false;
+                }
+                submitBtn.disabled = !valid;
+              }
+              selects.forEach(function(sel){ sel.addEventListener('change', validate); });
+              validate();
+            })();
+            // Fallback si Bootstrap JS no está cargado: abrir modal manualmente
+            (function(){
+              var trigger = document.querySelector('button[data-bs-target="#teamModal"]');
+              var modal = document.getElementById('teamModal');
+              if(!trigger || !modal) return;
+              function hasBootstrap(){ return typeof bootstrap !== 'undefined' && bootstrap.Modal; }
+              if(hasBootstrap()) return; // Bootstrap presente, no necesitamos fallback
+              trigger.addEventListener('click', function(){
+                // crear backdrop si no existe
+                var backdrop = document.getElementById('teamModalBackdrop');
+                if(!backdrop){
+                  backdrop = document.createElement('div');
+                  backdrop.id = 'teamModalBackdrop';
+                  backdrop.className = 'modal-backdrop fade show';
+                  document.body.appendChild(backdrop);
+                }
+                modal.style.display = 'block';
+                modal.classList.add('show');
+                modal.removeAttribute('aria-hidden');
+                document.body.classList.add('modal-open');
+              });
+              // Cierre por botón .btn-close o Cancelar
+              modal.addEventListener('click', function(e){
+                if(e.target.classList.contains('btn-close') || (e.target.matches('[data-bs-dismiss="modal"]'))){
+                  closeModal();
+                }
+              });
+              function closeModal(){
+                modal.classList.remove('show');
+                modal.style.display = 'none';
+                modal.setAttribute('aria-hidden','true');
+                document.body.classList.remove('modal-open');
+                var backdrop = document.getElementById('teamModalBackdrop');
+                if(backdrop) backdrop.remove();
+              }
+              // Cerrar con ESC
+              document.addEventListener('keydown', function(ev){
+                if(ev.key === 'Escape' && modal.classList.contains('show')) closeModal();
+              });
+            })();
+          </script>
+        {% endif %}
+      {% endif %}
     </article>
   </main>
   {% include 'partials/footer_participante.html' %}

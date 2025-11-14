@@ -162,7 +162,7 @@ class Taller(models.Model):
 	Unicidad: el título debe ser único por congreso, pero puede repetirse entre congresos distintos.
 	"""
 	congreso = models.ForeignKey(Congreso, on_delete=models.CASCADE, related_name="talleres")
-	title = models.CharField("Nombre del taller", max_length=200)
+	title = models.CharField("Nombre del taller", max_length=300)
 	image = models.ImageField(upload_to="talleres/", null=True, blank=True)
 	lugar = models.CharField("Lugar", max_length=200, blank=True)
 	cupo_maximo = models.PositiveIntegerField("Cupo máximo", null=True, blank=True)
@@ -184,7 +184,7 @@ class Conferencia(models.Model):
 	Unicidad: el título debe ser único por congreso.
 	"""
 	congreso = models.ForeignKey(Congreso, on_delete=models.CASCADE, related_name="conferencias")
-	title = models.CharField("Nombre de la conferencia", max_length=200)
+	title = models.CharField("Nombre de la conferencia", max_length=300)
 	image = models.ImageField(upload_to="conferencias/", null=True, blank=True)
 	lugar = models.CharField("Lugar", max_length=200, blank=True)
 	cupo_maximo = models.PositiveIntegerField("Cupo máximo", null=True, blank=True)
@@ -214,7 +214,7 @@ class Concurso(models.Model):
 
 	congreso = models.ForeignKey(Congreso, on_delete=models.CASCADE, related_name="concursos")
 	type = models.CharField(max_length=12, choices=TIPO_CHOICES, default="individual")
-	title = models.CharField("Nombre del concurso", max_length=200)
+	title = models.CharField("Nombre del concurso", max_length=300)
 	image = models.ImageField(upload_to="concursos/", null=True, blank=True)
 	lugar = models.CharField("Lugar", max_length=200, blank=True)
 	instructor = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name="concursos_imparte")
@@ -289,6 +289,46 @@ class ConcursoInscripcion(models.Model):
 
 
 # =============================
+# Equipos de concursos grupales
+# =============================
+class ConcursoEquipo(models.Model):
+	"""Representa un equipo inscrito en un concurso grupal.
+
+	Cada equipo pertenece a un `Concurso` y está liderado por el usuario que realiza la inscripción.
+	`nombre` es único dentro del concurso para evitar duplicados fáciles de distinguir.
+	"""
+	congreso = models.ForeignKey(Congreso, on_delete=models.CASCADE, related_name="equipos_concurso")
+	concurso = models.ForeignKey(Concurso, on_delete=models.CASCADE, related_name="equipos")
+	nombre = models.CharField(max_length=150)
+	lider = models.ForeignKey(User, on_delete=models.CASCADE, related_name="equipos_liderados")
+	created_at = models.DateTimeField(auto_now_add=True)
+
+	class Meta:
+		unique_together = ("concurso", "nombre")
+		ordering = ["concurso__title", "nombre"]
+
+	def __str__(self) -> str:
+		return f"Equipo {self.nombre} - {self.concurso.title}"
+
+
+class ConcursoEquipoMiembro(models.Model):
+	"""Miembros de un equipo de concurso grupal.
+
+	Incluye al líder (se registra también como miembro para facilitar listados homogéneos).
+	"""
+	equipo = models.ForeignKey(ConcursoEquipo, on_delete=models.CASCADE, related_name="miembros")
+	user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="equipos_concurso")
+	created_at = models.DateTimeField(auto_now_add=True)
+
+	class Meta:
+		unique_together = ("equipo", "user")
+		ordering = ["equipo__nombre", "user__username"]
+
+	def __str__(self) -> str:
+		return f"{self.equipo.nombre} -> {self.user.username}"
+
+
+# =============================
 # Avisos por congreso
 # =============================
 class Aviso(models.Model):
@@ -336,6 +376,7 @@ class ExtraField(models.Model):
 	section = models.CharField(max_length=20, choices=SECTION_CHOICES, default="registro", verbose_name="Sección")
 	required = models.BooleanField(default=False)
 	active = models.BooleanField(default=True)
+	unique_value = models.BooleanField(default=False, verbose_name="Irrepetible")
 	order = models.PositiveIntegerField(default=0)
 	choices_text = models.TextField(
 		"Opciones (solo para Lista)", blank=True,

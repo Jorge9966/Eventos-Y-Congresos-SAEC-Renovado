@@ -28,11 +28,16 @@
       <div class="content-wrapper pt-3 pb-5">
         <form method="post" enctype="multipart/form-data" class="form-card">
           {% csrf_token %}
-          {% if messages %}
-            {% for m in messages %}
-              <div class="alert alert-{% if 'error' in m.tags %}danger{% else %}{{ m.tags }}{% endif %}">{{ m }}</div>
-            {% endfor %}
-          {% endif %}
+           {# Mensajes de éxito del módulo concursos #}
+           {% if messages %}
+             <div class="container-fluid px-0">
+               {% for m in messages %}
+                 {% if 'concurso' in m.tags and 'success' in m.tags %}
+                   <div class="alert alert-success">{{ m }}</div>
+                 {% endif %}
+               {% endfor %}
+             </div>
+           {% endif %}
           <div class="row g-3">
             <div class="col-12">
               <label class="form-label" for="image">Imagen (3MB Máximo)</label>

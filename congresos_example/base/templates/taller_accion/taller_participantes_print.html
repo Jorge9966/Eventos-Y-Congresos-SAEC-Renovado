@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Imprimir participantes - {{ taller.title }}</title>
+  {% load static extra_filters %}
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    @media print {
+      .no-print { display: none !important; }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+    body { background:#fff; }
+    .brand-header { display:flex; align-items:center; gap:16px; margin:16px 0 8px; }
+    .brand-header img { max-height:72px; }
+    .page-title { font-weight:800; margin:0; }
+    .controls { margin:12px 0 18px; }
+    table th, table td { vertical-align: middle; }
+  </style>
+</head>
+<body class="container py-3">
+  <div class="brand-header">
+    {% if congreso.logo %}
+      <img src="{{ congreso.logo.url }}" alt="{{ congreso.name }}" />
+    {% endif %}
+    <div>
+      <h1 class="page-title h4">Lista de participantes</h1>
+      <div class="text-muted">Taller: {{ taller.title }}</div>
+    </div>
+  </div>
+
+  <div class="controls no-print d-flex align-items-center gap-2">
+    <label class="form-label mb-0" for="orderBy">Ordenar por:</label>
+    <select id="orderBy" class="form-select" style="max-width:280px;">
+      <option value="nombre" selected>Nombre</option>
+      <option value="nivel">Nivel de desempeño</option>
+      {% for ef in extra_fields %}
+        <option value="extra{{ ef.id }}">{{ ef.name }}</option>
+      {% endfor %}
+    </select>
+    <button class="btn btn-dark ms-auto" onclick="window.print()">Imprimir</button>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-bordered align-middle" id="tabla">
+      <thead class="table-light">
+        <tr>
+          <th>Nombre</th>
+          <th>Correo</th>
+          <th>Nivel de desempeño</th>
+          {% for ef in extra_fields %}
+            <th>{{ ef.name }}</th>
+          {% endfor %}
+          <th>Firma</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ins in inscripciones %}
+          {% with peruser=extra_values_by_user|get_item:ins.user.id %}
+          <tr
+            data-nombre="{{ ins.user.first_name|default:ins.user.username|lower }}"
+            data-nivel="{{ ins.performance_level.name|default:''|lower }}"
+            {% for ef in extra_fields %}
+              data-extra{{ ef.id }}="{{ peruser|get_item:ef.id|default:''|lower }}"
+            {% endfor %}
+          >
+            <td>{{ ins.user.first_name|default:ins.user.username }}</td>
+            <td>{{ ins.user.email|default:"—" }}</td>
+            <td>{{ ins.performance_level.name|default:"—" }}</td>
+            {% for ef in extra_fields %}
+              <td>{{ peruser|get_item:ef.id|default:"—" }}</td>
+            {% endfor %}
+            <td style="width:160px"></td>
+          </tr>
+          {% endwith %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    (function(){
+      const select = document.getElementById('orderBy');
+      const tbody = document.querySelector('#tabla tbody');
+      function sortBy(key){
+        const dsKey = key; // matches data-* attribute suffix (e.g., nombre, extra12)
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        rows.sort((a,b)=>{
+          const av = (a.dataset[dsKey]||'').toString();
+          const bv = (b.dataset[dsKey]||'').toString();
+          return av.localeCompare(bv, 'es', {sensitivity:'base', numeric:true});
+        });
+        rows.forEach(r=>tbody.appendChild(r));
+      }
+      select.addEventListener('change', ()=> sortBy(select.value));
+      sortBy(select.value);
+    })();
+  </script>
+</body>
+</html>

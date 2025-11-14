@@ -1,5 +1,6 @@
 {% comment %} Topbar reutilizable para vistas de participantes (sin Encuesta ni Pagar) {% endcomment %}
 <nav class="nav-main">
+  {% with curr=request.resolver_match.url_name %}
   {% if congreso and congreso.logo %}
     <div class="nav-logo-wrap">
       <a href="{% url 'inicio_participante' %}" class="nav-logo-link" aria-label="Inicio del participante">
@@ -7,27 +8,177 @@
       </a>
     </div>
   {% endif %}
-  <a {% if approved %}href="{% url 'inicio_participante' %}"{% else %}class="disabled-nav" aria-disabled="true" tabindex="-1"{% endif %} aria-current="page">Inicio</a>
+  <a {% if approved %}href="{% url 'inicio_participante' %}"{% else %}class="disabled-nav" aria-disabled="true" tabindex="-1"{% endif %}{% if curr == 'inicio_participante' %} aria-current="page"{% endif %}>Inicio</a>
   {% if congreso %}
-    <a {% if approved %}href="{{ talleres_url }}"{% else %}class="disabled-nav" aria-disabled="true" tabindex="-1"{% endif %}>Talleres</a>
-    <a {% if approved %}href="{{ concursos_url }}"{% else %}class="disabled-nav" aria-disabled="true" tabindex="-1"{% endif %}>Concursos</a>
-    <a {% if approved %}href="{{ conferencias_url }}"{% else %}class="disabled-nav" aria-disabled="true" tabindex="-1"{% endif %}>Conferencias</a>
+    <a {% if approved %}href="{{ talleres_url }}"{% else %}class="disabled-nav" aria-disabled="true" tabindex="-1"{% endif %}{% if curr in 'part_talleres,part_taller_inscribir' %} aria-current="page"{% endif %}>Talleres</a>
+    <a {% if approved %}href="{{ concursos_url }}"{% else %}class="disabled-nav" aria-disabled="true" tabindex="-1"{% endif %}{% if curr in 'part_concursos,part_concurso_inscribir' %} aria-current="page"{% endif %}>Concursos</a>
+    <a {% if approved %}href="{{ conferencias_url }}"{% else %}class="disabled-nav" aria-disabled="true" tabindex="-1"{% endif %}{% if curr in 'part_conferencias,part_conferencia_inscribir' %} aria-current="page"{% endif %}>Conferencias</a>
   {% endif %}
   {# Avisos y Perfil ahora también bloqueados si la membresía no está aprobada #}
-  <a {% if approved %}href="{% url 'part_avisos' %}"{% else %}class="disabled-nav" aria-disabled="true" tabindex="-1"{% endif %}>Avisos</a>
-  <a {% if approved %}href="{% url 'part_perfil' %}"{% else %}class="disabled-nav" aria-disabled="true" tabindex="-1"{% endif %}>Perfil</a>
+  <a {% if approved %}href="{% url 'part_avisos' %}"{% else %}class="disabled-nav" aria-disabled="true" tabindex="-1"{% endif %}{% if curr == 'part_avisos' %} aria-current="page"{% endif %}>Avisos</a>
+  <a {% if approved %}href="{% url 'part_perfil' %}"{% else %}class="disabled-nav" aria-disabled="true" tabindex="-1"{% endif %}{% if curr == 'part_perfil' %} aria-current="page"{% endif %}>Perfil</a>
   <a href="{% url 'logout' %}">Cerrar</a>
+  {% endwith %}
+  <!-- Indicador deslizante dentro del nav -->
+  <div class="nav-indicator" aria-hidden="true"></div>
 </nav>
 <style>
   /* Estilos base de la barra de navegación (mismos que en inicio_participante) */
   /* Layout: hace que el footer se pegue al fondo cuando el contenido es corto */
   body{ min-height:100vh; display:flex; flex-direction:column; }
-  .nav-main{ display:flex; gap:46px; justify-content:center; padding:22px 40px 4px; position:sticky; top:0; background:#f8fafc; z-index:20; }
-  .nav-main a{ text-decoration:none; font-weight:600; color:#1e293b; position:relative; padding:6px 2px 14px; font-size:0.95rem; }
-  .nav-main a::after{ content:""; position:absolute; left:0; right:0; bottom:4px; height:3px; background:#f59e0b; opacity:.8; border-radius:3px; }
+  .nav-main{
+    display:flex; gap:46px; justify-content:center; padding:22px 40px 4px;
+    position:sticky; top:0; background:#f8fafc; z-index:20;
+    box-shadow: 0 10px 28px -26px rgba(2,6,23,.45);
+    backdrop-filter: saturate(110%) blur(2px);
+    animation: navBounce .52s cubic-bezier(.2,.7,.2,1.1) both;
+  }
+  .nav-main a{
+    text-decoration:none; font-weight:600; color:#1e293b; position:relative;
+    padding:6px 2px 14px; font-size:0.95rem; display:inline-block;
+    transition: color .18s ease, transform .18s ease;
+  }
+  /* Desactivar subrayado por-link: usaremos un indicador global deslizante */
+  .nav-main a::after{ content:""; position:absolute; height:0; width:0; opacity:0; }
+  .nav-main a:hover,
+  .nav-main a:focus-visible{ color:#0b1730; transform: translateY(-1px); }
+  .nav-main a:hover::after,
+  .nav-main a:focus-visible::after{ width:100%; animation: underlineFlow 1.6s linear infinite; }
+  /* Estado actual, si se marca con aria-current */
+  .nav-main a[aria-current="page"]::after{ width:100%; animation: underlineFlow 2.2s linear infinite; }
   /* Posiciona el logo en la esquina izquierda sin afectar el centrado de los enlaces */
   .nav-logo-wrap{ position:absolute; left:20px; top:50%; transform:translateY(-50%); }
-  .nav-logo{ height:42px; width:auto; object-fit:contain; border-radius:4px; box-shadow:0 1px 2px rgba(0,0,0,.08); }
+  .nav-logo{ height:42px; width:auto; object-fit:contain; border-radius:4px; box-shadow:0 1px 2px rgba(0,0,0,.08); transition: transform .2s ease, box-shadow .2s ease; }
   .nav-logo-link{ display:inline-block; }
+  .nav-logo-link:hover .nav-logo{ transform: translateY(-1px) scale(1.03); box-shadow:0 6px 16px rgba(2,6,23,.12); }
   .disabled-nav{ pointer-events:none; opacity:.45; text-decoration:none; }
+  .disabled-nav::after{ width:0!important; }
+
+  /* Indicador deslizante global */
+  .nav-indicator{
+    position: absolute; left:0; bottom:4px; height:3px; width:0;
+    background: linear-gradient(90deg, #f59e0b, #8b5cf6, #3b82f6, #f59e0b);
+    background-size: 300% 100%; border-radius: 3px;
+    /* Sin brillo adicional */
+    box-shadow: none;
+    will-change: left, width;
+    pointer-events: none;
+    z-index: 1;
+    /* Solo flujo del gradiente */
+    animation: underlineFlow 2.5s linear infinite;
+    /* Movida por JS a velocidad constante para un deslizamiento más natural */
+  }
+
+  /* Animaciones y accesibilidad */
+  @keyframes navBounce {
+    0% { opacity:0; transform: translateY(-16px); }
+    60% { opacity:1; transform: translateY(2px); }
+    100% { opacity:1; transform: translateY(0); }
+  }
+  @keyframes underlineFlow {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 100% 50%; }
+  }
+  
+  @media (prefers-reduced-motion: reduce){
+    .nav-main{ animation:none; }
+    .nav-main a, .nav-logo{ transition: none; }
+    .nav-main a::after{ transition:none; }
+    .nav-indicator{ transition:none; animation:none; }
+  }
 </style>
+<script>
+  (function(){
+    var nav = document.querySelector('.nav-main');
+    var indicator = document.querySelector('.nav-indicator');
+    if(!nav || !indicator) return;
+
+    function eligibleLinks(){
+      var links = Array.from(nav.querySelectorAll('a'));
+      return links.filter(function(a){
+        if(a.classList.contains('disabled-nav')) return false;
+        if((a.getAttribute('href')||'').indexOf('logout') !== -1) return false;
+        return true;
+      });
+    }
+
+    // Medición relativa al nav
+    function measure(el){
+      var r = el.getBoundingClientRect();
+      var rn = nav.getBoundingClientRect();
+      return { x: r.left - rn.left, w: r.width };
+    }
+
+    // Animación suave por interpolación (lerp)
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var posX = 0, posW = 0;
+    var targetX = 0, targetW = 0;
+    var running = false, lastTs = 0;
+    var SPEED_X = 420; // px/seg para desplazamiento horizontal (más lento)
+    var SPEED_W = 650; // px/seg para ajuste de ancho (más lento)
+
+    function applyStyles(){
+      indicator.style.left = Math.max(0, Math.round(posX)) + 'px';
+      indicator.style.width = Math.max(0, Math.round(posW)) + 'px';
+    }
+
+    function rafStep(ts){
+      if(!running){ return; }
+      if(!lastTs){ lastTs = ts; }
+      var dt = Math.min(0.04, (ts - lastTs) / 1000); // limitar a 40ms
+      lastTs = ts;
+
+      // mover X a velocidad constante
+      var dx = targetX - posX;
+      var stepX = Math.sign(dx) * SPEED_X * dt;
+      if(Math.abs(stepX) >= Math.abs(dx)) posX = targetX; else posX += stepX;
+
+      // ajustar ancho también de forma progresiva
+      var dw = targetW - posW;
+      var stepW = Math.sign(dw) * SPEED_W * dt;
+      if(Math.abs(stepW) >= Math.abs(dw)) posW = targetW; else posW += stepW;
+
+      applyStyles();
+
+      if(posX === targetX && posW === targetW){ running = false; lastTs = 0; return; }
+      requestAnimationFrame(rafStep);
+    }
+
+    function moveTo(el, immediate){
+      if(!el) return;
+      var m = measure(el);
+      if(immediate || reduce){
+        posX = targetX = Math.max(0, Math.round(m.x));
+        posW = targetW = Math.max(0, Math.round(m.w));
+        applyStyles();
+        running = false; lastTs = 0;
+        return;
+      }
+      targetX = Math.max(0, Math.round(m.x));
+      targetW = Math.max(0, Math.round(m.w));
+      if(!running){ running = true; lastTs = 0; requestAnimationFrame(rafStep); }
+    }
+
+    function getActive(){
+      var current = nav.querySelector('a[aria-current="page"]');
+      if(current && !current.classList.contains('disabled-nav')) return current;
+      var list = eligibleLinks();
+      return list.length ? list[0] : null;
+    }
+
+    var links = eligibleLinks();
+    var active = getActive();
+    if(active){ moveTo(active, true); }
+    // Ajuste tras carga de fuentes/imagenes para evitar cálculo con anchuras provisionales
+    window.addEventListener('load', function(){ moveTo(getActive(), true); });
+    if('requestAnimationFrame' in window){ requestAnimationFrame(function(){ moveTo(getActive(), true); }); }
+
+    links.forEach(function(a){
+      a.addEventListener('mouseenter', function(){ moveTo(a, false); });
+      a.addEventListener('focus', function(){ moveTo(a, false); });
+    });
+
+    nav.addEventListener('mouseleave', function(){ moveTo(getActive(), false); });
+    window.addEventListener('resize', function(){ moveTo(getActive(), true); });
+  })();
+</script>

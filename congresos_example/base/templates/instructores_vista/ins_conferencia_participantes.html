@@ -1,4 +1,4 @@
-{% load static %}
+{% load static extra_filters %}
 <!doctype html>
 <html lang="es">
 <head>
@@ -19,7 +19,7 @@
         <div class="d-flex align-items-start justify-content-between">
           <h2 class="hero-title me-3 flex-grow-1" style="font-size:1.6rem;">{{ conferencia.title }}</h2>
           <div class="d-grid gap-2" style="min-width:220px;">
-            <a href="#" class="btn btn-dark btn-lg w-100" aria-label="Imprimir" title="Imprimir">
+            <a href="{% url 'conferencia_participantes_print' congreso.id conferencia.id %}" class="btn btn-dark btn-lg w-100" aria-label="Imprimir" title="Imprimir" target="_blank" rel="noopener">
               <i class="bi bi-printer"></i>
               <span class="visually-hidden">Imprimir</span>
             </a>
@@ -36,17 +36,24 @@
                 <thead>
                   <tr>
                     <th>Nombre</th>
-                    <th>Matrícula</th>
-                    <th>Semestre y grupo</th>
+                    <th>Correo</th>
+                    <th>Nivel de desempeño</th>
+                    {% for f in extra_fields %}
+                      <th>{{ f.name }}</th>
+                    {% endfor %}
                     <th class="text-end">Quitar</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {% for ins in inscripciones %}
+                  {% for row in participantes_rows %}
+                    {% with ins=row.ins %}
                     <tr>
                       <td>{{ ins.user.get_full_name|default:ins.user.username }}</td>
-                      <td>{{ ins.user.username }}</td>
+                      <td>{{ ins.user.email|default:ins.user.username }}</td>
                       <td>{{ ins.performance_level.name|default:'—' }}</td>
+                      {% for val in row.values_ordered %}
+                        <td>{{ val|default:'' }}</td>
+                      {% endfor %}
                       <td class="text-end">
                         {% if puede_remover %}
                         <form method="post" style="display:inline;" onsubmit="return confirm('¿Quitar participante de esta conferencia?');">
@@ -60,6 +67,7 @@
                         {% endif %}
                       </td>
                     </tr>
+                    {% endwith %}
                   {% endfor %}
                 </tbody>
               </table>
