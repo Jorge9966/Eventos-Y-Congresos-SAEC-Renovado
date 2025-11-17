@@ -39,7 +39,7 @@
     {% if congreso and congreso.logo %}
       <img src="{{ congreso.logo.url }}" alt="{{ congreso.name }}" class="logo-img">
     {% else %}
-      <img src="/static/images/logo_isc.png" alt="ISC" class="logo-img">
+      <img src="{% static 'base/img/SAEC.png' %}?v=2" alt="SAEC" class="logo-img">
     {% endif %}
   </div>
   <div class="right-side">

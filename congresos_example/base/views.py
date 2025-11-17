@@ -15,6 +15,7 @@ import random
 import re
 from datetime import timedelta
 from django.utils import timezone
+from django.db import transaction
 from functools import wraps
 from django.utils.text import slugify
 from django.db.models import Q, Count
@@ -6045,15 +6046,23 @@ def instructores_view(request, congreso_id: int):
             mem_id = request.POST.get("membership_id")
             if mem_id:
                 try:
-                    membership = UserCongresoMembership.objects.get(id=mem_id, congreso=congreso)
-                    user_to_clean = membership.user
-                    membership.delete()
-                    # Limpieza opcional: remover inscripciones del usuario en este congreso y valores extra congreso-scoped
-                    TallerInscripcion.objects.filter(congreso=congreso, user=user_to_clean).delete()
-                    ConferenciaInscripcion.objects.filter(congreso=congreso, user=user_to_clean).delete()
-                    ConcursoInscripcion.objects.filter(congreso=congreso, user=user_to_clean).delete()
-                    UserExtraFieldValue.objects.filter(congreso=congreso, user=user_to_clean).delete()
-                    messages.success(request, "Membresía eliminada.")
+                    with transaction.atomic():
+                        membership = UserCongresoMembership.objects.select_related("user").get(id=mem_id, congreso=congreso)
+                        user_to_clean = membership.user
+                        # Eliminar membresía
+                        membership.delete()
+                        # Eliminar datos asociados a ESTE congreso
+                        TallerInscripcion.objects.filter(congreso=congreso, user=user_to_clean).delete()
+                        ConferenciaInscripcion.objects.filter(congreso=congreso, user=user_to_clean).delete()
+                        ConcursoInscripcion.objects.filter(congreso=congreso, user=user_to_clean).delete()
+                        UserExtraFieldValue.objects.filter(congreso=congreso, user=user_to_clean).delete()
+                        # Si el usuario ya no tiene ninguna otra membresía en ningún congreso, eliminar al usuario por completo
+                        has_other_memberships = UserCongresoMembership.objects.filter(user=user_to_clean).exists()
+                        if not has_other_memberships:
+                            user_to_clean.delete()
+                            messages.success(request, "Membresía eliminada y usuario borrado definitivamente.")
+                        else:
+                            messages.success(request, "Membresía eliminada.")
                 except UserCongresoMembership.DoesNotExist:
                     messages.error(request, "La membresía indicada no existe.")
             else:
@@ -6181,15 +6190,23 @@ def participantes_view(request, congreso_id: int):
             mem_id = request.POST.get("membership_id")
             if mem_id:
                 try:
-                    membership = UserCongresoMembership.objects.get(id=mem_id, congreso=congreso)
-                    user_to_clean = membership.user
-                    membership.delete()
-                    # Limpieza opcional: remover inscripciones del usuario en este congreso y valores extra congreso-scoped
-                    TallerInscripcion.objects.filter(congreso=congreso, user=user_to_clean).delete()
-                    ConferenciaInscripcion.objects.filter(congreso=congreso, user=user_to_clean).delete()
-                    ConcursoInscripcion.objects.filter(congreso=congreso, user=user_to_clean).delete()
-                    UserExtraFieldValue.objects.filter(congreso=congreso, user=user_to_clean).delete()
-                    messages.success(request, "Membresía eliminada.")
+                    with transaction.atomic():
+                        membership = UserCongresoMembership.objects.select_related("user").get(id=mem_id, congreso=congreso)
+                        user_to_clean = membership.user
+                        # Eliminar membresía
+                        membership.delete()
+                        # Eliminar datos asociados a ESTE congreso
+                        TallerInscripcion.objects.filter(congreso=congreso, user=user_to_clean).delete()
+                        ConferenciaInscripcion.objects.filter(congreso=congreso, user=user_to_clean).delete()
+                        ConcursoInscripcion.objects.filter(congreso=congreso, user=user_to_clean).delete()
+                        UserExtraFieldValue.objects.filter(congreso=congreso, user=user_to_clean).delete()
+                        # Si el usuario ya no tiene ninguna otra membresía en ningún congreso, eliminar al usuario por completo
+                        has_other_memberships = UserCongresoMembership.objects.filter(user=user_to_clean).exists()
+                        if not has_other_memberships:
+                            user_to_clean.delete()
+                            messages.success(request, "Membresía eliminada y usuario borrado definitivamente.")
+                        else:
+                            messages.success(request, "Membresía eliminada.")
                 except UserCongresoMembership.DoesNotExist:
                     messages.error(request, "La membresía indicada no existe.")
             else:

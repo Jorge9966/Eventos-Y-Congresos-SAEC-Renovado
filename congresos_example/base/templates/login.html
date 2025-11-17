@@ -32,11 +32,12 @@
   </style>
 </head>
 <body>
+  {% load static %}
   <div class="left-side">
     {% if selected_congreso and selected_congreso.logo %}
       <img src="{{ selected_congreso.logo.url }}" alt="{{ selected_congreso.name }}" class="logo-img">
     {% else %}
-      <img src="/static/images/logo_isc.png" alt="ISC" class="logo-img">
+      <img src="{% static 'base/img/SAEC.png' %}?v=2" alt="SAEC" class="logo-img">
     {% endif %}
   </div>
   <div class="right-side">
