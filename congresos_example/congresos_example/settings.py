@@ -162,7 +162,7 @@ SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 # - Para envío real, define EMAIL_BACKEND=smtp y completa los demás valores
 # -----------------------------
 EMAIL_BACKEND = os.environ.get(
-    "EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend"
+    "EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend"
 )
 
 # Valores comunes para SMTP (se usan si configuras EMAIL_BACKEND smtp)
