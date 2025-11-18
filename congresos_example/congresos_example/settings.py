@@ -173,5 +173,5 @@ EMAIL_USE_SSL = os.environ.get("EMAIL_USE_SSL", "False").lower() == "true"
 EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "congresoyeventotecnm@gmail.com")
 EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "atoemcjgdlnuujlb")
 DEFAULT_FROM_EMAIL = os.environ.get(
-    "DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "no-reply@localhost"
+    "DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "congresoyeventotecnm@gmail.com"
 )
