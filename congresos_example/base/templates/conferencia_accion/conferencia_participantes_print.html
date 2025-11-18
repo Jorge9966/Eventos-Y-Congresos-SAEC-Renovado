@@ -55,13 +55,13 @@
         {% for ins in inscripciones %}
           {% with peruser=extra_values_by_user|get_item:ins.user.id %}
           <tr
-            data-nombre="{{ ins.user.first_name|default:ins.user.username|lower }}"
+            data-nombre="{{ ins.user.get_full_name|default:ins.user.username|lower }}"
             data-nivel="{{ ins.performance_level.name|default:''|lower }}"
             {% for ef in extra_fields %}
               data-extra{{ ef.id }}="{{ peruser|get_item:ef.id|default:''|lower }}"
             {% endfor %}
           >
-            <td>{{ ins.user.first_name|default:ins.user.username }}</td>
+            <td>{{ ins.user.get_full_name|default:ins.user.username }}</td>
             <td>{{ ins.user.email|default:"—" }}</td>
             <td>{{ ins.performance_level.name|default:"—" }}</td>
             {% for ef in extra_fields %}

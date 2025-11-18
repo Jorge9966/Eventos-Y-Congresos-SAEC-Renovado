@@ -1773,7 +1773,11 @@ def instructor_participantes_view(request):
     for t in talleres:
         recurso_rows.append({"tipo": "taller", "obj": t, "titulo": t.title, "inscritos": t.inscripciones.count(), "url": f"{reverse('ins_taller_participantes')}?id={t.id}"})
     for c in concursos:
-        recurso_rows.append({"tipo": "concurso", "obj": c, "titulo": c.title, "inscritos": c.inscripciones.count(), "url": f"{reverse('ins_concurso_participantes')}?id={c.id}"})
+        row = {"tipo": "concurso", "obj": c, "titulo": c.title, "inscritos": c.inscripciones.count(), "url": f"{reverse('ins_concurso_participantes')}?id={c.id}"}
+        if c.type == "grupal":
+            # Conteo real de equipos para mostrar "X de Y equipos"
+            row["equipos_inscritos"] = c.equipos.count()
+        recurso_rows.append(row)
     for cf in conferencias:
         recurso_rows.append({"tipo": "conferencia", "obj": cf, "titulo": cf.title, "inscritos": cf.inscripciones.count(), "url": f"{reverse('ins_conferencia_participantes')}?id={cf.id}"})
     recurso_rows.sort(key=lambda r: (r["tipo"], getattr(r["obj"], "created_at", None)))
@@ -1896,32 +1900,6 @@ def instructor_talleres_view(request):
         for ins in inscripciones:
             ordered = [extra_values_by_user.get(ins.user_id, {}).get(f.id, "") for f in extra_fields]
             participantes_rows.append({"ins": ins, "values_ordered": ordered})
-        # Agrupar por equipo cuando sea grupal
-        if active.type == "grupal":
-            ins_by_user = {i.user_id: i for i in inscripciones}
-            equipos = (
-                ConcursoEquipo.objects.filter(concurso=active)
-                .prefetch_related("miembros__user")
-                .order_by("nombre")
-            )
-            seen_users = set()
-            for eq in equipos:
-                rows = []
-                miembros = list(eq.miembros.select_related("user").all())
-                miembros.sort(key=lambda m: (m.user.first_name or m.user.username, m.user.last_name or ""))
-                for m in miembros:
-                    ins = ins_by_user.get(m.user_id)
-                    if not ins:
-                        continue
-                    seen_users.add(m.user_id)
-                    ordered = [extra_values_by_user.get(ins.user_id, {}).get(f.id, "") for f in extra_fields]
-                    rows.append({"ins": ins, "values_ordered": ordered})
-                teams_rows.append({"equipo": eq, "rows": rows})
-            # Inscripciones sin equipo (inconsistencias)
-            for ins in inscripciones:
-                if ins.user_id not in seen_users:
-                    ordered = [extra_values_by_user.get(ins.user_id, {}).get(f.id, "") for f in extra_fields]
-                    orphan_rows.append({"ins": ins, "values_ordered": ordered})
     ctx = {
         "congreso": congreso,
         "talleres": list(talleres_qs),
@@ -5668,7 +5646,7 @@ def concurso_participantes_print_view(request, congreso_id: int, concurso_id: in
         ConcursoInscripcion.objects
         .filter(congreso=congreso, concurso=concurso)
         .select_related("user", "performance_level")
-        .order_by("user__first_name", "user__username")
+        .order_by("user__first_name", "user__last_name", "user__username")
     )
     from .models import ExtraField, UserExtraFieldValue
     extra_fields = ExtraField.objects.filter(active=True).filter(
@@ -5684,6 +5662,34 @@ def concurso_participantes_print_view(request, congreso_id: int, concurso_id: in
     for v in extra_vals:
         d = extra_values_by_user.setdefault(v.user_id, {})
         d[v.field_id] = v.value
+
+    # Agrupación por equipos para concursos grupales
+    teams_rows = []
+    orphan_rows = []
+    if concurso.type == "grupal":
+        ins_by_user = {i.user_id: i for i in inscripciones}
+        equipos = (
+            ConcursoEquipo.objects.filter(concurso=concurso)
+            .prefetch_related("miembros__user")
+            .order_by("nombre")
+        )
+        seen_users = set()
+        for eq in equipos:
+            rows = []
+            miembros = list(eq.miembros.select_related("user").all())
+            miembros.sort(key=lambda m: ((m.user.first_name or m.user.username), (m.user.last_name or "")))
+            for m in miembros:
+                ins = ins_by_user.get(m.user_id)
+                if not ins:
+                    continue
+                seen_users.add(m.user_id)
+                ordered = [extra_values_by_user.get(ins.user_id, {}).get(f.id, "") for f in extra_fields]
+                rows.append({"ins": ins, "values_ordered": ordered})
+            teams_rows.append({"equipo": eq, "rows": rows})
+        for ins in inscripciones:
+            if ins.user_id not in seen_users:
+                ordered = [extra_values_by_user.get(ins.user_id, {}).get(f.id, "") for f in extra_fields]
+                orphan_rows.append({"ins": ins, "values_ordered": ordered})
     # Si es Instructor, exigir que sea dueño del recurso
     if request.user.is_authenticated and request.user.groups.filter(name="Instructores").exists() and not _user_is_congreso_admin(request.user, congreso):
         if getattr(concurso, "instructor_id", None) != request.user.id:
@@ -5696,6 +5702,8 @@ def concurso_participantes_print_view(request, congreso_id: int, concurso_id: in
         "inscripciones": inscripciones,
         "extra_fields": extra_fields,
         "extra_values_by_user": extra_values_by_user,
+        "teams_rows": teams_rows,
+        "orphan_rows": orphan_rows,
     }
     return render(request, "concurso_accion/concurso_participantes_print.html", ctx)
 

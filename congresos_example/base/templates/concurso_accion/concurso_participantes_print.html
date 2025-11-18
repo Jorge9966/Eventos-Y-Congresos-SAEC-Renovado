@@ -26,71 +26,150 @@
     </div>
   </div>
 
-  <div class="controls no-print d-flex align-items-center gap-2">
-    <label class="form-label mb-0" for="orderBy">Ordenar por:</label>
-    <select id="orderBy" class="form-select" style="max-width:280px;">
-      <option value="nombre" selected>Nombre</option>
-      <option value="nivel">Nivel de desempeño</option>
-      {% for ef in extra_fields %}
-        <option value="extra{{ ef.id }}">{{ ef.name }}</option>
+  {% if concurso.type == 'grupal' %}
+    <div class="controls no-print d-flex align-items-center gap-2">
+      <button class="btn btn-dark ms-auto" onclick="window.print()">Imprimir</button>
+    </div>
+
+    {% if teams_rows %}
+      {% for t in teams_rows %}
+        <h5 class="mt-4 mb-2">Equipo: {{ t.equipo.nombre }}</h5>
+        <div class="table-responsive">
+          <table class="table table-bordered align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>Nombre</th>
+                <th>Correo</th>
+                <th>Nivel de desempeño</th>
+                {% for ef in extra_fields %}
+                  <th>{{ ef.name }}</th>
+                {% endfor %}
+                <th>Firma</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in t.rows %}
+                {% with ins=row.ins %}
+                <tr>
+                  <td>{{ ins.user.get_full_name|default:ins.user.username }}</td>
+                  <td>{{ ins.user.email|default:"—" }}</td>
+                  <td>{{ ins.performance_level.name|default:"—" }}</td>
+                  {% for val in row.values_ordered %}
+                    <td>{{ val|default:"—" }}</td>
+                  {% endfor %}
+                  <td style="width:160px"></td>
+                </tr>
+                {% endwith %}
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       {% endfor %}
-    </select>
-    <button class="btn btn-dark ms-auto" onclick="window.print()">Imprimir</button>
-  </div>
+    {% endif %}
 
-  <div class="table-responsive">
-    <table class="table table-bordered align-middle" id="tabla">
-      <thead class="table-light">
-        <tr>
-          <th>Nombre</th>
-          <th>Correo</th>
-          <th>Nivel de desempeño</th>
-          {% for ef in extra_fields %}
-            <th>{{ ef.name }}</th>
-          {% endfor %}
-          <th>Firma</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for ins in inscripciones %}
-          {% with peruser=extra_values_by_user|get_item:ins.user.id %}
-          <tr
-            data-nombre="{{ ins.user.first_name|default:ins.user.username|lower }}"
-            data-nivel="{{ ins.performance_level.name|default:''|lower }}"
-            {% for ef in extra_fields %}
-              data-extra{{ ef.id }}="{{ peruser|get_item:ef.id|default:''|lower }}"
+    {% if orphan_rows %}
+      <h5 class="mt-4 mb-2">Sin equipo</h5>
+      <div class="table-responsive">
+        <table class="table table-bordered align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Nombre</th>
+              <th>Correo</th>
+              <th>Nivel de desempeño</th>
+              {% for ef in extra_fields %}
+                <th>{{ ef.name }}</th>
+              {% endfor %}
+              <th>Firma</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in orphan_rows %}
+              {% with ins=row.ins %}
+              <tr>
+                <td>{{ ins.user.get_full_name|default:ins.user.username }}</td>
+                <td>{{ ins.user.email|default:"—" }}</td>
+                <td>{{ ins.performance_level.name|default:"—" }}</td>
+                {% for val in row.values_ordered %}
+                  <td>{{ val|default:"—" }}</td>
+                {% endfor %}
+                <td style="width:160px"></td>
+              </tr>
+              {% endwith %}
             {% endfor %}
-          >
-            <td>{{ ins.user.first_name|default:ins.user.username }}</td>
-            <td>{{ ins.user.email|default:"—" }}</td>
-            <td>{{ ins.performance_level.name|default:"—" }}</td>
-            {% for ef in extra_fields %}
-              <td>{{ peruser|get_item:ef.id|default:"—" }}</td>
-            {% endfor %}
-            <td style="width:160px"></td>
-          </tr>
-          {% endwith %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+    {% if not teams_rows and not orphan_rows %}
+      <div class="text-muted">Aún no hay participantes registrados para este concurso.</div>
+    {% endif %}
+  {% else %}
+    <div class="controls no-print d-flex align-items-center gap-2">
+      <label class="form-label mb-0" for="orderBy">Ordenar por:</label>
+      <select id="orderBy" class="form-select" style="max-width:280px;">
+        <option value="nombre" selected>Nombre</option>
+        <option value="nivel">Nivel de desempeño</option>
+        {% for ef in extra_fields %}
+          <option value="extra{{ ef.id }}">{{ ef.name }}</option>
         {% endfor %}
-      </tbody>
-    </table>
-  </div>
+      </select>
+      <button class="btn btn-dark ms-auto" onclick="window.print()">Imprimir</button>
+    </div>
 
-  <script>
-    (function(){
-      const select = document.getElementById('orderBy');
-      const tbody = document.querySelector('#tabla tbody');
-      function sortBy(key){
-        const rows = Array.from(tbody.querySelectorAll('tr'));
-        rows.sort((a,b)=>{
-          const av = (a.dataset[key]||'').toString();
-          const bv = (b.dataset[key]||'').toString();
-          return av.localeCompare(bv, 'es', {sensitivity:'base', numeric:true});
-        });
-        rows.forEach(r=>tbody.appendChild(r));
-      }
-      select.addEventListener('change', ()=> sortBy(select.value));
-      sortBy(select.value);
-    })();
-  </script>
+    <div class="table-responsive">
+      <table class="table table-bordered align-middle" id="tabla">
+        <thead class="table-light">
+          <tr>
+            <th>Nombre</th>
+            <th>Correo</th>
+            <th>Nivel de desempeño</th>
+            {% for ef in extra_fields %}
+              <th>{{ ef.name }}</th>
+            {% endfor %}
+            <th>Firma</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ins in inscripciones %}
+            {% with peruser=extra_values_by_user|get_item:ins.user.id %}
+            <tr
+              data-nombre="{{ ins.user.get_full_name|default:ins.user.username|lower }}"
+              data-nivel="{{ ins.performance_level.name|default:''|lower }}"
+              {% for ef in extra_fields %}
+                data-extra{{ ef.id }}="{{ peruser|get_item:ef.id|default:''|lower }}"
+              {% endfor %}
+            >
+              <td>{{ ins.user.get_full_name|default:ins.user.username }}</td>
+              <td>{{ ins.user.email|default:"—" }}</td>
+              <td>{{ ins.performance_level.name|default:"—" }}</td>
+              {% for ef in extra_fields %}
+                <td>{{ peruser|get_item:ef.id|default:"—" }}</td>
+              {% endfor %}
+              <td style="width:160px"></td>
+            </tr>
+            {% endwith %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <script>
+      (function(){
+        const select = document.getElementById('orderBy');
+        const tbody = document.querySelector('#tabla tbody');
+        function sortBy(key){
+          const rows = Array.from(tbody.querySelectorAll('tr'));
+          rows.sort((a,b)=>{
+            const av = (a.dataset[key]||'').toString();
+            const bv = (b.dataset[key]||'').toString();
+            return av.localeCompare(bv, 'es', {sensitivity:'base', numeric:true});
+          });
+          rows.forEach(r=>tbody.appendChild(r));
+        }
+        select.addEventListener('change', ()=> sortBy(select.value));
+        sortBy(select.value);
+      })();
+    </script>
+  {% endif %}
 </body>
 </html>

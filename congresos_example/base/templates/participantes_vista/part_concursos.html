@@ -71,8 +71,7 @@
                 {% if c.type == 'individual' %}
                   {{ c.inscritos_count|default:0 }} participantes{% if c.cupo_maximo %} de {{ c.cupo_maximo }}{% endif %}
                 {% else %}
-                  {{ c.equipos_inscritos|default:0 }} equipos{% if c.numero_equipos %} de {{ c.numero_equipos }}{% endif %}<br/>
-                  <span style="color:#94a3b8; font-size:.85em;">Equipos: {{ c.numero_equipos|default:'—' }} · Máx/Integrantes: {{ c.max_por_equipo|default:'—' }}</span>
+                  {{ c.inscritos_count|default:0 }} participantes
                 {% endif %}
               </div>
               <span class="status-badge">Disponible</span>

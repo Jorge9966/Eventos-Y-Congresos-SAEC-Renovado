@@ -26,7 +26,12 @@ SECRET_KEY = "django-insecure-a6=ziep7wab(%0)nn!n$m&1sc1(&vcg_sq#e01!d3=*$f@@r)x
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ["saec.valladolid.tecnm.mx"]
+ALLOWED_HOSTS = [
+    "127.0.0.1",
+    "localhost",
+    "[::1]",
+    "saec.valladolid.tecnm.mx",
+]
 
 
 # Application definition

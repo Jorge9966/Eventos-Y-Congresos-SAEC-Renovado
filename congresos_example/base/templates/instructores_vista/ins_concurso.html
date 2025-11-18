@@ -107,8 +107,11 @@
                 </div>
                 {% elif concurso.type == 'grupal' %}
                 <div class="meta-item">
-                  <span class="meta-label">Equipos máximos</span>
-                  <span class="meta-value">{% if concurso.numero_equipos and concurso.max_por_equipo %}{{ concurso.max_por_equipo }} de {{ concurso.numero_equipos }}{% elif concurso.numero_equipos %}{{ concurso.numero_equipos }}{% elif concurso.max_por_equipo %}{{ concurso.max_por_equipo }}{% else %}—{% endif %}</span>
+                  <span class="meta-label">Equipos</span>
+                  <span class="meta-value">
+                    {{ equipos_inscritos|default:0 }}{% if concurso.numero_equipos %} de {{ concurso.numero_equipos }}{% endif %}
+                    {% if concurso.max_por_equipo %}<span style="color:#94a3b8; font-weight:500;"> · Máx integrantes/equipo: {{ concurso.max_por_equipo }}</span>{% endif %}
+                  </span>
                 </div>
                 {% endif %}
               </div>

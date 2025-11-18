@@ -57,6 +57,11 @@
                     {{ r.inscritos }} inscritos de {{ r.obj.cupo_maximo|default:35 }}
                   {% elif r.tipo == 'concurso' and r.obj.type == 'individual' %}
                     {{ r.inscritos }} inscritos de {{ r.obj.cupo_maximo|default:35 }}
+                  {% elif r.tipo == 'concurso' and r.obj.type == 'grupal' %}
+                    {{ r.equipos_inscritos|default:0 }}{% if r.obj.numero_equipos %} de {{ r.obj.numero_equipos }}{% endif %} equipos
+                    {% if r.obj.max_por_equipo %}
+                      <span style="color:#94a3b8; font-size:.85em;"> · Máx integrantes/equipo: {{ r.obj.max_por_equipo }}</span>
+                    {% endif %}
                   {% else %}
                     {{ r.inscritos }} inscritos
                   {% endif %}
