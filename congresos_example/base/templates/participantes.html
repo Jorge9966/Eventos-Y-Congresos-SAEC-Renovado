@@ -148,7 +148,7 @@
                             <option value="rejected" {% if row.status == 'rejected' %}selected{% endif %}>No activo</option>
                             <option value="approved" {% if row.status == 'approved' %}selected{% endif %}>Activar</option>
                           </select>
-                          <a href="{% url 'usuario_editar_participante' congreso.id row.membership.id %}" class="action-btn" title="Editar"><i class="bi bi-pencil"></i></a>
+                          <a href="{% url 'usuario_editar_participante' congreso.id row.membership.id %}?next={{ request.get_full_path|urlencode }}" class="action-btn" title="Editar"><i class="bi bi-pencil"></i></a>
                           <button type="button" class="action-btn" title="Eliminar" onclick="if(confirm('¿Eliminar esta membresía? Esta acción no se puede deshacer.')){ var f=this.closest('form'); f.querySelector('input[name=action]').value='delete_membership'; f.submit(); }" {% if not is_admin %}disabled{% endif %}>
                             <i class="bi bi-trash"></i>
                           </button>

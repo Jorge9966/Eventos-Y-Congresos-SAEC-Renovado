@@ -11,6 +11,7 @@ from django.conf import settings
 from django.core.files.uploadedfile import UploadedFile
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
+from django.utils.http import url_has_allowed_host_and_scheme
 import random
 import re
 from datetime import timedelta
@@ -3085,6 +3086,15 @@ def usuario_editar_participante_view(request, congreso_id: int, membership_id: i
                         )
 
                     messages.success(request, "Participante actualizado.")
+                    # Redirigir al origen si se proporcionó `next` y es seguro
+                    next_url = (request.POST.get('next') or request.GET.get('next') or '').strip()
+                    if next_url:
+                        try:
+                            if url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+                                return redirect(next_url)
+                        except Exception:
+                            # en caso de error de validación, ignorar y seguir al destino por defecto
+                            pass
                     return redirect("participantes", congreso.id)
 
     grupos = request.user.groups.values_list("name", flat=True)

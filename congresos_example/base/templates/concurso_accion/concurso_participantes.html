@@ -155,7 +155,7 @@
                                 <input type="hidden" name="insc_id" value="{{ ins.id }}" />
                                 {% with mem_id=membership_by_user|get_item:ins.user.id %}
                                   {% if mem_id %}
-                                    <a href="{% url 'usuario_editar_participante' congreso.id mem_id %}" class="action-btn" title="Editar" aria-label="Editar" {% if not is_admin %}style="pointer-events:none;opacity:.55;"{% endif %}>
+                                    <a href="{% url 'usuario_editar_participante' congreso.id mem_id %}?next={{ request.get_full_path|urlencode }}" class="action-btn" title="Editar" aria-label="Editar" {% if not is_admin %}style="pointer-events:none;opacity:.55;"{% endif %}>
                                       <i class="bi bi-pencil"></i>
                                     </a>
                                   {% endif %}
@@ -251,7 +251,7 @@
                             <input type="hidden" name="insc_id" value="{{ ins.id }}" />
                             {% with mem_id=membership_by_user|get_item:ins.user.id %}
                               {% if mem_id %}
-                                <a href="{% url 'usuario_editar_participante' congreso.id mem_id %}" class="action-btn" title="Editar" aria-label="Editar" {% if not is_admin %}style="pointer-events:none;opacity:.55;"{% endif %}>
+                                <a href="{% url 'usuario_editar_participante' congreso.id mem_id %}?next={{ request.get_full_path|urlencode }}" class="action-btn" title="Editar" aria-label="Editar" {% if not is_admin %}style="pointer-events:none;opacity:.55;"{% endif %}>
                                   <i class="bi bi-pencil"></i>
                                 </a>
                               {% endif %}

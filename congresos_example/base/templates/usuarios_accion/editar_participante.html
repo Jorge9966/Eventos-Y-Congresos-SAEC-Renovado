@@ -28,6 +28,7 @@
 
       <form class="form-card" method="post">
         {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.GET.next }}" />
         {% if messages %}
           {% for m in messages %}
             <div class="alert alert-{% if 'error' in m.tags %}danger{% elif 'warning' in m.tags %}warning{% elif 'info' in m.tags %}info{% else %}success{% endif %}">{{ m }}</div>
@@ -95,7 +96,11 @@
         {% endif %}
 
         <div class="d-flex gap-2 mt-3">
-          <a class="btn btn-light" href="{% url 'participantes' congreso.id %}">Cancelar</a>
+          {% if request.GET.next %}
+            <a class="btn btn-light" href="{{ request.GET.next }}">Cancelar</a>
+          {% else %}
+            <a class="btn btn-light" href="{% url 'participantes' congreso.id %}">Cancelar</a>
+          {% endif %}
           <button class="btn btn-primary" type="submit"><i class="bi bi-save"></i> Guardar cambios</button>
         </div>
       </form>
