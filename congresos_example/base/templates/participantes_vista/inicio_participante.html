@@ -74,7 +74,14 @@
   {% include 'partials/participante_topbar.html' %}
 
   <header class="hero">
-    <h1>PRUEBA ALUMNO</h1>
+    {# Mostrar nombre completo del participante. Django User solo tiene first_name y last_name; si last_name incluye ambos apellidos se mostrará completo. #}
+    <h1>
+      {% if request.user.first_name or request.user.last_name %}
+        {{ request.user.first_name }} {{ request.user.last_name }}
+      {% else %}
+        {{ request.user.username }}
+      {% endif %}
+    </h1>
     <div class="sub">{{ congreso.name|default:"" }}</div>
     <div class="divider" aria-hidden="true"></div>
     {% if membership_status != 'none' %}

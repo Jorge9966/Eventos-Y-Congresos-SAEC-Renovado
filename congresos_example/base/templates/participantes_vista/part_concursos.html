@@ -71,7 +71,13 @@
                 {% if c.type == 'individual' %}
                   {{ c.inscritos_count|default:0 }} participantes{% if c.cupo_maximo %} de {{ c.cupo_maximo }}{% endif %}
                 {% else %}
-                  {{ c.inscritos_count|default:0 }} participantes
+                  {# Concursos grupales: mostrar equipos inscritos y capacidad #}
+                  {% if c.equipos_inscritos is not None %}
+                    {{ c.equipos_inscritos }} equipos{% if c.numero_equipos %} de {{ c.numero_equipos }}{% endif %}
+                    {% if c.max_por_equipo %}<span class="d-block">(máx {{ c.max_por_equipo }} por equipo)</span>{% endif %}
+                  {% else %}
+                    0 equipos
+                  {% endif %}
                 {% endif %}
               </div>
               <span class="status-badge">Disponible</span>

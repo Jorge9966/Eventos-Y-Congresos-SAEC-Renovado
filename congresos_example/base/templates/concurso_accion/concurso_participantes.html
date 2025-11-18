@@ -144,7 +144,7 @@
                         {% for row in t.rows %}
                           {% with ins=row.ins %}
                           <tr>
-                            <td>{{ ins.user.first_name|default:ins.user.username }}</td>
+                            <td>{{ ins.user|full_name }}</td>
                             <td>{{ ins.user.email|default:'—' }}</td>
                             <td>{{ ins.performance_level.name|default:'—' }}</td>
                             {% for val in row.values_ordered %}<td>{{ val|default:'—' }}</td>{% endfor %}
@@ -193,7 +193,7 @@
                         {% for row in orphan_rows %}
                           {% with ins=row.ins %}
                           <tr>
-                            <td>{{ ins.user.first_name|default:ins.user.username }}</td>
+                            <td>{{ ins.user|full_name }}</td>
                             <td>{{ ins.user.email|default:'—' }}</td>
                             <td>{{ ins.performance_level.name|default:'—' }}</td>
                             {% for val in row.values_ordered %}<td>{{ val|default:'—' }}</td>{% endfor %}
@@ -236,7 +236,7 @@
                   <tbody>
                     {% for ins in inscripciones %}
                       <tr>
-                        <td>{{ ins.user.first_name|default:ins.user.username }}</td>
+                        <td>{{ ins.user|full_name }}</td>
                         <td>{{ ins.user.email|default:"—" }}</td>
                         <td>{{ ins.performance_level.name|default:"—" }}</td>
                         {% for ef in extra_fields %}

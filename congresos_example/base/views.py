@@ -1014,48 +1014,11 @@ def part_taller_inscribir_view(request, taller_id: int):
         for v in values_qs:
             d = extra_values_by_user.setdefault(v["user_id"], {})
             d[v["field_id"]] = v["value"]
-        # Si es grupal, mapear nombre de equipo por usuario para mostrar en tabla plana
-        if active.type == "grupal" and user_ids:
-            membs = (
-                ConcursoEquipoMiembro.objects
-                .filter(equipo__concurso=active, user_id__in=user_ids)
-                .select_related("equipo")
-            )
-            team_by_user = {m.user_id: m.equipo.nombre for m in membs}
-            for ins in inscripciones:
-                setattr(ins, "team_name", team_by_user.get(ins.user_id, ""))
+        # Talleres no manejan equipos; lógica grupal eliminada.
 
         for ins in inscripciones:
             ordered = [extra_values_by_user.get(ins.user_id, {}).get(f.id, "") for f in extra_fields]
             participantes_rows.append({"ins": ins, "values_ordered": ordered})
-        # Agrupar por equipo si el concurso es grupal
-        teams_rows = []
-        orphan_rows = []
-        if active.type == "grupal":
-            ins_by_user = {i.user_id: i for i in inscripciones}
-            equipos = (
-                ConcursoEquipo.objects.filter(concurso=active)
-                .prefetch_related("miembros__user")
-                .order_by("nombre")
-            )
-            seen_users = set()
-            for eq in equipos:
-                rows = []
-                miembros = list(eq.miembros.select_related("user").all())
-                miembros.sort(key=lambda m: (m.user.first_name or m.user.username, m.user.last_name or ""))
-                for m in miembros:
-                    ins = ins_by_user.get(m.user_id)
-                    if not ins:
-                        continue
-                    seen_users.add(m.user_id)
-                    ordered = [extra_values_by_user.get(ins.user_id, {}).get(f.id, "") for f in extra_fields]
-                    rows.append({"ins": ins, "values_ordered": ordered})
-                teams_rows.append({"equipo": eq, "rows": rows})
-            # Inscripciones sin equipo (inconsistencias)
-            for ins in inscripciones:
-                if ins.user_id not in seen_users:
-                    ordered = [extra_values_by_user.get(ins.user_id, {}).get(f.id, "") for f in extra_fields]
-                    orphan_rows.append({"ins": ins, "values_ordered": ordered})
     ctx.update({
         "extra_fields": extra_fields,
         "participantes_rows": participantes_rows,

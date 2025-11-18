@@ -21,13 +21,13 @@ def get_item(mapping, key):
 
 @register.filter(name="first_line")
 def first_line(value):
-    """
-    Devuelve solo la primera línea del texto, sin etiquetas HTML.
+    """Devuelve solo la primera línea del texto, sin etiquetas HTML.
+
     Uso en plantilla: {{ texto|first_line }}
     """
-    if value is None:
-        return ""
     try:
+        if not value:
+            return ""
         text = str(value)
         # Convertir saltos <br> y cierres de bloque en nuevas líneas antes de quitar etiquetas
         text = re.sub(r"(?i)<\s*br\s*/?>", "\n", text)
@@ -45,5 +45,24 @@ def first_line(value):
         # Colapsar espacios consecutivos y recortar extremos
         first = re.sub(r"\s+", " ", first).strip()
         return first
+    except Exception:
+        return ""
+
+
+@register.filter(name="full_name")
+def full_name(user):
+    """Devuelve nombre completo (nombre + apellidos) si existen.
+
+    Si el proyecto guarda ambos apellidos juntos en last_name, se mostrarán.
+    Fallback: username.
+    Uso: {{ user|full_name }}.
+    """
+    try:
+        if not user:
+            return ""
+        first = (getattr(user, "first_name", "") or "").strip()
+        last = (getattr(user, "last_name", "") or "").strip()
+        combined = f"{first} {last}".strip()
+        return combined or (getattr(user, "username", "") or "")
     except Exception:
         return ""

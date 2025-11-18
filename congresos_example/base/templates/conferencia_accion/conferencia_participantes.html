@@ -59,7 +59,7 @@
                 <tbody>
                   {% for ins in inscripciones %}
                     <tr>
-                      <td>{{ ins.user.first_name|default:ins.user.username }}</td>
+                      <td>{{ ins.user|full_name }}</td>
                       <td>{{ ins.user.email|default:"—" }}</td>
                       <td>{{ ins.performance_level.name|default:"—" }}</td>
                       {% for ef in extra_fields %}

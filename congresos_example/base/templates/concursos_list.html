@@ -57,10 +57,8 @@
             <div class="work-meta">
               <div><strong>Responsable:</strong>
                 {% if x.instructor %}
-                  {{ x.instructor.first_name|default:x.instructor.username }}
-                {% else %}
-                  —
-                {% endif %}
+                  {{ x.instructor|full_name }}
+                {% else %}—{% endif %}
               </div>
               {% if x.lugar %}<div><strong>Lugar:</strong> {{ x.lugar }}</div>{% endif %}
               {% if x.description %}
