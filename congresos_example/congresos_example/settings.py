@@ -166,12 +166,12 @@ EMAIL_BACKEND = os.environ.get(
 )
 
 # Valores comunes para SMTP (se usan si configuras EMAIL_BACKEND smtp)
-EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "django.core.mail.backends.smtp.EmailBackend")
 EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
 EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "True").lower() == "true"
 EMAIL_USE_SSL = os.environ.get("EMAIL_USE_SSL", "False").lower() == "true"
-EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
-EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "congresoyeventotecnm@gmail.com")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "atoemcjgdlnuujlb")
 DEFAULT_FROM_EMAIL = os.environ.get(
     "DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "no-reply@localhost"
 )
