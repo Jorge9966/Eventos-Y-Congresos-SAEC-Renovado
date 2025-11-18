@@ -40,56 +40,215 @@
     <div class="container-fluid" style="padding-left:0; padding-right:0;">
       <div class="panel"><div class="panel-header"><span class="panel-title-blue">Participantes inscritos al concurso</span></div>
         <div class="panel-body">
-          {% if inscripciones %}
-            <div class="table-responsive">
-              <table class="table table-striped align-middle">
-                <thead>
-                  <tr>
-                    <th>Nombre</th>
-                    <th>Correo</th>
-                    <th>Nivel de desempeño</th>
-                    {% if concurso.type == 'grupal' %}
-                      <th>Equipo</th>
-                    {% endif %}
-                    {% for f in extra_fields %}
-                      <th>{{ f.name }}</th>
-                    {% endfor %}
-                    <th class="text-end">Quitar</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for ins in inscripciones %}
-                    <tr>
-                      <td>{{ ins.user.get_full_name|default:ins.user.username }}</td>
-                      <td>{{ ins.user.email|default:ins.user.username }}</td>
-                      <td>{{ ins.performance_level.name|default:'—' }}</td>
-                      {% if concurso.type == 'grupal' %}
-                        <td>{{ ins.team_name|default:'—' }}</td>
-                      {% endif %}
-                      {% for f in extra_fields %}
-                        {% with val=extra_values_by_user|get_item:ins.user_id|get_item:f.id %}
-                          <td>{{ val|default:'' }}</td>
-                        {% endwith %}
-                      {% endfor %}
-                      <td class="text-end">
-                        {% if puede_remover %}
-                        <form method="post" style="display:inline;" onsubmit="return confirm('¿Quitar participante de este concurso?');">
+          {% if concurso.type == 'grupal' %}
+            {% if teams_rows %}
+              {% for t in teams_rows %}
+                <div class="mb-3 p-3" style="border:1px solid #e2e8f0;border-radius:10px;">
+                  <div class="d-flex align-items-center justify-content-between mb-2">
+                    <h5 class="m-0">Equipo: {{ t.equipo.nombre }}</h5>
+                    <div class="d-flex align-items-center gap-2">
+                      {% if puede_remover %}
+                        <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editTeamModal_{{ t.equipo.id }}"><i class="bi bi-pencil-square"></i></button>
+                        <form method="post" onsubmit="return confirm('¿Eliminar el equipo completo? Se quitarán todas sus inscripciones.');">
                           {% csrf_token %}
-                          <input type="hidden" name="action" value="remove" />
-                          <input type="hidden" name="insc_id" value="{{ ins.id }}" />
-                          <button class="btn btn-sm btn-danger" title="Quitar" aria-label="Quitar">
-                            <i class="bi bi-trash"></i>
-                          </button>
+                          <input type="hidden" name="action" value="remove_team" />
+                          <input type="hidden" name="team_id" value="{{ t.equipo.id }}" />
+                          <button class="btn btn-outline-danger btn-sm"><i class="bi bi-people-fill"></i> <i class="bi bi-trash"></i></button>
                         </form>
-                        {% endif %}
-                      </td>
-                    </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            </div>
+                      {% endif %}
+                    </div>
+                  </div>
+                  {# Modal editar equipo (Instructor) #}
+                  {% if puede_remover %}
+                  <div class="modal fade" id="editTeamModal_{{ t.equipo.id }}" tabindex="-1" aria-hidden="true">
+                    <div class="modal-dialog">
+                      <div class="modal-content">
+                        <div class="modal-header"><h5 class="modal-title">Editar equipo</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+                        <form method="post">
+                          {% csrf_token %}
+                          <input type="hidden" name="action" value="edit_team" />
+                          <input type="hidden" name="team_id" value="{{ t.equipo.id }}" />
+                          <div class="modal-body">
+                            <div class="mb-3">
+                              <label class="form-label">Nombre del equipo</label>
+                              <input type="text" class="form-control" name="team_name" value="{{ t.equipo.nombre }}" required />
+                            </div>
+                            <div class="mb-2">
+                              <label class="form-label">Integrante #1 (Líder)</label>
+                              <select name="team_member_1" class="form-select" required>
+                                <option value="{{ t.equipo.lider_id }}" selected>
+                                  {{ t.equipo.lider.get_full_name|default:t.equipo.lider.username }} ({{ t.equipo.lider.email|default:'—' }})
+                                </option>
+                                {% for m in team_members_map|get_item:t.equipo.id %}
+                                  {% if m.id != t.equipo.lider_id %}
+                                    <option value="{{ m.id }}">{{ m.display }}</option>
+                                  {% endif %}
+                                {% endfor %}
+                                {% for opt in equipo_participantes_options %}
+                                  <option value="{{ opt.id }}">{{ opt.display }}</option>
+                                {% endfor %}
+                              </select>
+                            </div>
+                            {% if team_slots %}
+                              {% for slot in team_slots %}
+                                <div class="mb-2">
+                                  <label class="form-label">Integrante #{{ slot }}</label>
+                                  <select name="team_member_{{ slot }}" class="form-select">
+                                    {% with pre=team_prefill_map|get_item:t.equipo.id %}
+                                      {% if pre|get_item:slot %}
+                                        {% with sel=pre|get_item:slot %}
+                                          <option value="{{ sel.id }}" selected>{{ sel.display }}</option>
+                                        {% endwith %}
+                                      {% endif %}
+                                    {% endwith %}
+                                    <option value="">Sin integrante</option>
+                                    {% for opt in equipo_participantes_options %}
+                                      <option value="{{ opt.id }}">{{ opt.display }}</option>
+                                    {% endfor %}
+                                  </select>
+                                </div>
+                              {% endfor %}
+                            {% endif %}
+                            <div class="form-text">Máximo integrantes por equipo: {{ max_integrantes_equipo }} (incluye líder).</div>
+                          </div>
+                          <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button type="submit" class="btn btn-primary">Guardar cambios</button></div>
+                        </form>
+                      </div>
+                    </div>
+                  </div>
+                  {% endif %}
+                  <div class="table-responsive">
+                    <table class="table table-striped align-middle">
+                      <thead>
+                        <tr>
+                          <th>Nombre</th>
+                          <th>Correo</th>
+                          <th>Nivel de desempeño</th>
+                          {% for f in extra_fields %}<th>{{ f.name }}</th>{% endfor %}
+                          <th class="text-end">Quitar</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for row in t.rows %}
+                          {% with ins=row.ins %}
+                          <tr>
+                            <td>{{ ins.user.get_full_name|default:ins.user.username }}</td>
+                            <td>{{ ins.user.email|default:ins.user.username }}</td>
+                            <td>{{ ins.performance_level.name|default:'—' }}</td>
+                            {% for val in row.values_ordered %}<td>{{ val|default:'' }}</td>{% endfor %}
+                            <td class="text-end">
+                              {% if puede_remover %}
+                              <form method="post" style="display:inline;" onsubmit="return confirm('¿Quitar participante de este concurso?');">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="remove" />
+                                <input type="hidden" name="insc_id" value="{{ ins.id }}" />
+                                <button class="btn btn-sm btn-danger" title="Quitar" aria-label="Quitar">
+                                  <i class="bi bi-trash"></i>
+                                </button>
+                              </form>
+                              {% endif %}
+                            </td>
+                          </tr>
+                          {% endwith %}
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              {% endfor %}
+              {% if orphan_rows %}
+                <div class="mb-3 p-3" style="border:1px dashed #e2e8f0;border-radius:10px;">
+                  <div class="d-flex align-items-center justify-content-between mb-2">
+                    <h5 class="m-0">Sin equipo</h5>
+                  </div>
+                  <div class="table-responsive">
+                    <table class="table table-striped align-middle">
+                      <thead>
+                        <tr>
+                          <th>Nombre</th>
+                          <th>Correo</th>
+                          <th>Nivel de desempeño</th>
+                          {% for f in extra_fields %}<th>{{ f.name }}</th>{% endfor %}
+                          <th class="text-end">Quitar</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for row in orphan_rows %}
+                          {% with ins=row.ins %}
+                          <tr>
+                            <td>{{ ins.user.get_full_name|default:ins.user.username }}</td>
+                            <td>{{ ins.user.email|default:ins.user.username }}</td>
+                            <td>{{ ins.performance_level.name|default:'—' }}</td>
+                            {% for val in row.values_ordered %}<td>{{ val|default:'' }}</td>{% endfor %}
+                            <td class="text-end">
+                              {% if puede_remover %}
+                              <form method="post" style="display:inline;" onsubmit="return confirm('¿Quitar participante de este concurso?');">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="remove" />
+                                <input type="hidden" name="insc_id" value="{{ ins.id }}" />
+                                <button class="btn btn-sm btn-danger" title="Quitar" aria-label="Quitar">
+                                  <i class="bi bi-trash"></i>
+                                </button>
+                              </form>
+                              {% endif %}
+                            </td>
+                          </tr>
+                          {% endwith %}
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              {% endif %}
+            {% else %}
+              <div class="empty">Aún no hay equipos registrados para este concurso.</div>
+            {% endif %}
           {% else %}
-            <div class="empty">Aún no hay participantes registrados para este concurso.</div>
+            {% if inscripciones %}
+              <div class="table-responsive">
+                <table class="table table-striped align-middle">
+                  <thead>
+                    <tr>
+                      <th>Nombre</th>
+                      <th>Correo</th>
+                      <th>Nivel de desempeño</th>
+                      {% for f in extra_fields %}
+                        <th>{{ f.name }}</th>
+                      {% endfor %}
+                      <th class="text-end">Quitar</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for ins in inscripciones %}
+                      <tr>
+                        <td>{{ ins.user.get_full_name|default:ins.user.username }}</td>
+                        <td>{{ ins.user.email|default:ins.user.username }}</td>
+                        <td>{{ ins.performance_level.name|default:'—' }}</td>
+                        {% for f in extra_fields %}
+                          {% with val=extra_values_by_user|get_item:ins.user_id|get_item:f.id %}
+                            <td>{{ val|default:'' }}</td>
+                          {% endwith %}
+                        {% endfor %}
+                        <td class="text-end">
+                          {% if puede_remover %}
+                          <form method="post" style="display:inline;" onsubmit="return confirm('¿Quitar participante de este concurso?');">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="remove" />
+                            <input type="hidden" name="insc_id" value="{{ ins.id }}" />
+                            <button class="btn btn-sm btn-danger" title="Quitar" aria-label="Quitar">
+                              <i class="bi bi-trash"></i>
+                            </button>
+                          </form>
+                          {% endif %}
+                        </td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <div class="empty">Aún no hay participantes registrados para este concurso.</div>
+            {% endif %}
           {% endif %}
         </div>
       </div>
@@ -98,3 +257,53 @@
   </div>
 </body>
 </html>
+<script>
+  // Fallback para abrir/cerrar modales cuando Bootstrap JS no está cargado (instructor)
+  (function(){
+    function hasBootstrap(){ return typeof bootstrap !== 'undefined' && bootstrap.Modal; }
+    if (hasBootstrap()) return;
+    var triggers = document.querySelectorAll('[data-bs-toggle="modal"][data-bs-target]');
+    if(!triggers.length) return;
+    function openModal(modal){
+      if(!modal) return;
+      var id = modal.getAttribute('id') || ('modal-' + Date.now());
+      modal.setAttribute('id', id);
+      var backdropId = id + '-backdrop';
+      var backdrop = document.getElementById(backdropId);
+      if(!backdrop){
+        backdrop = document.createElement('div');
+        backdrop.id = backdropId;
+        backdrop.className = 'modal-backdrop fade show';
+        document.body.appendChild(backdrop);
+      }
+      modal.style.display = 'block';
+      modal.classList.add('show');
+      modal.removeAttribute('aria-hidden');
+      document.body.classList.add('modal-open');
+      modal.addEventListener('click', function onClick(e){
+        if(e.target.classList.contains('btn-close') || e.target.closest('[data-bs-dismiss="modal"]')){
+          closeModal(modal);
+          modal.removeEventListener('click', onClick);
+        }
+      });
+      function onEsc(ev){ if(ev.key === 'Escape'){ closeModal(modal); document.removeEventListener('keydown', onEsc);} }
+      document.addEventListener('keydown', onEsc);
+    }
+    function closeModal(modal){
+      var id = modal.getAttribute('id');
+      var backdrop = document.getElementById(id + '-backdrop');
+      modal.classList.remove('show');
+      modal.style.display = 'none';
+      modal.setAttribute('aria-hidden','true');
+      document.body.classList.remove('modal-open');
+      if(backdrop) backdrop.remove();
+    }
+    triggers.forEach(function(btn){
+      btn.addEventListener('click', function(ev){
+        ev.preventDefault();
+        var targetSel = btn.getAttribute('data-bs-target');
+        try{ openModal(document.querySelector(targetSel)); }catch(e){ console.warn('modal fallback error', e); }
+      });
+    });
+  })();
+</script>

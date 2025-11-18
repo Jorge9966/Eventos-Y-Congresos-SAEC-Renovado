@@ -177,10 +177,10 @@
             <div class="det-value">{% if concurso.lugar %}{{ concurso.lugar }}{% else %}—{% endif %}</div>
           </div>
           <div class="det-col">
-            <div class="det-label">{% if concurso.es_grupal %}Equipos{% else %}Cupo{% endif %}</div>
+            <div class="det-label">{% if concurso.type == 'grupal' %}Equipos{% else %}Cupo{% endif %}</div>
             <div class="det-value">
-              {% if concurso.es_grupal %}
-                {% if concurso.numero_equipos_maximo %}{{ concurso.numero_equipos_maximo }}{% else %}—{% endif %}
+              {% if concurso.type == 'grupal' %}
+                {% if concurso.numero_equipos %}{{ concurso.numero_equipos }}{% else %}—{% endif %}
               {% else %}
                 {% if capacidad %}{{ capacidad }}{% else %}—{% endif %}
               {% endif %}
@@ -203,41 +203,100 @@
               <div class="ps-count">{{ equipos_inscritos|default:0 }}{% if concurso.numero_equipos %} / {{ concurso.numero_equipos }}{% endif %}</div>
             {% endif %}
           </div>
-          {% if participantes_rows %}
-            <div class="table-responsive mt-3">
-              <table class="table table-striped align-middle">
-                <thead>
-                  <tr>
-                    <th>Nombre</th>
-                    <th>Correo</th>
-                    <th>Nivel</th>
-                    {% if concurso.type == 'grupal' %}
-                      <th>Equipo</th>
-                    {% endif %}
-                    {% for f in extra_fields %}
-                      <th>{{ f.name }}</th>
-                    {% endfor %}
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for row in participantes_rows %}
-                    {% with ins=row.ins %}
-                      <tr>
-                        <td>{{ ins.user.get_full_name|default:ins.user.username }}</td>
-                        <td>{{ ins.user.email }}</td>
-                        <td>{% if ins.performance_level %}{{ ins.performance_level.name }}{% else %}—{% endif %}</td>
-                        {% if concurso.type == 'grupal' %}
-                          <td>{{ row.team_name|default:"" }}</td>
-                        {% endif %}
-                        {% for v in row.values_ordered %}
-                          <td>{{ v|default:"" }}</td>
+          {% if concurso.type == 'grupal' %}
+            {% if teams_rows %}
+              {% for t in teams_rows %}
+                <div class="mt-3 p-3" style="border:1px solid #e2e8f0;border-radius:10px;">
+                  <h6 class="m-0 mb-2">Equipo: {{ t.equipo.nombre }}</h6>
+                  <div class="table-responsive">
+                    <table class="table table-striped align-middle">
+                      <thead>
+                        <tr>
+                          <th>Nombre</th>
+                          <th>Correo</th>
+                          <th>Nivel</th>
+                          {% for f in extra_fields %}<th>{{ f.name }}</th>{% endfor %}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for row in t.rows %}
+                          {% with ins=row.ins %}
+                          <tr>
+                            <td>{{ ins.user.get_full_name|default:ins.user.username }}</td>
+                            <td>{{ ins.user.email }}</td>
+                            <td>{% if ins.performance_level %}{{ ins.performance_level.name }}{% else %}—{% endif %}</td>
+                            {% for v in row.values_ordered %}<td>{{ v|default:"" }}</td>{% endfor %}
+                          </tr>
+                          {% endwith %}
                         {% endfor %}
-                      </tr>
-                    {% endwith %}
-                  {% endfor %}
-                </tbody>
-              </table>
-            </div>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              {% endfor %}
+              {% if orphan_rows %}
+                <div class="mt-3 p-3" style="border:1px dashed #e2e8f0;border-radius:10px;">
+                  <h6 class="m-0 mb-2">Sin equipo</h6>
+                  <div class="table-responsive">
+                    <table class="table table-striped align-middle">
+                      <thead>
+                        <tr>
+                          <th>Nombre</th>
+                          <th>Correo</th>
+                          <th>Nivel</th>
+                          {% for f in extra_fields %}<th>{{ f.name }}</th>{% endfor %}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for row in orphan_rows %}
+                          {% with ins=row.ins %}
+                          <tr>
+                            <td>{{ ins.user.get_full_name|default:ins.user.username }}</td>
+                            <td>{{ ins.user.email }}</td>
+                            <td>{% if ins.performance_level %}{{ ins.performance_level.name }}{% else %}—{% endif %}</td>
+                            {% for v in row.values_ordered %}<td>{{ v|default:"" }}</td>{% endfor %}
+                          </tr>
+                          {% endwith %}
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              {% endif %}
+            {% else %}
+              <div class="mt-3">Aún no hay equipos registrados.</div>
+            {% endif %}
+          {% else %}
+            {% if participantes_rows %}
+              <div class="table-responsive mt-3">
+                <table class="table table-striped align-middle">
+                  <thead>
+                    <tr>
+                      <th>Nombre</th>
+                      <th>Correo</th>
+                      <th>Nivel</th>
+                      {% for f in extra_fields %}
+                        <th>{{ f.name }}</th>
+                      {% endfor %}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in participantes_rows %}
+                      {% with ins=row.ins %}
+                        <tr>
+                          <td>{{ ins.user.get_full_name|default:ins.user.username }}</td>
+                          <td>{{ ins.user.email }}</td>
+                          <td>{% if ins.performance_level %}{{ ins.performance_level.name }}{% else %}—{% endif %}</td>
+                          {% for v in row.values_ordered %}
+                            <td>{{ v|default:"" }}</td>
+                          {% endfor %}
+                        </tr>
+                      {% endwith %}
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% endif %}
           {% endif %}
         </div>
         <div class="nav-steps">
@@ -294,9 +353,7 @@
                     {% if max_integrantes_equipo %}
                       <div class="form-text">Máximo participantes por equipo: {{ max_integrantes_equipo }} (incluyéndote).</div>
                     {% endif %}
-                    {% if min_integrantes_equipo %}
-                      <div class="form-text">Tamaño fijo de equipo: {{ min_integrantes_equipo }} participantes (debes completar todos los campos).</div>
-                    {% endif %}
+                    <div class="form-text">Puedes crear un equipo con entre 1 y {{ max_integrantes_equipo }} participantes (incluyéndote). Los campos vacíos se ignorarán.</div>
                   </form>
                 </div>
                 <div class="modal-footer">
@@ -311,7 +368,8 @@
               var selects = document.querySelectorAll('#team-enroll-form .team-member-select');
               var submitBtn = document.getElementById('team-submit');
               if(!submitBtn) return;
-              var minAdditional = {{ required_integrantes_adicionales }}; // ahora todos los adicionales son obligatorios
+              // Ya no se requieren integrantes adicionales; sólo validamos unicidad.
+              var minAdditional = {{ required_integrantes_adicionales }}; // será 0
               function validate(){
                 var values = [];
                 var valid = true;
@@ -329,9 +387,7 @@
                     sel.classList.remove('is-invalid');
                   }
                 });
-                if(values.length !== minAdditional){
-                  valid = false;
-                }
+                // Sólo validar que no haya duplicados; minAdditional es 0.
                 submitBtn.disabled = !valid;
               }
               selects.forEach(function(sel){ sel.addEventListener('change', validate); });

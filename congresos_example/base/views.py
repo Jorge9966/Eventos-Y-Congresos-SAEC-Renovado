@@ -895,9 +895,8 @@ def part_concursos_view(request):
                 por_eq = c.max_por_equipo or 0
                 total = equipos * por_eq
                 c.capacidad_total = total if total > 0 else None
-                # No existe todavía un modelo de equipos; mostramos 0 como placeholder.
-                # Cuando se implemente Team/Equipo, reemplazar por conteo real distinto.
-                c.equipos_inscritos = 0
+                # Conteo real de equipos inscritos (ConcursoEquipo relacionados)
+                c.equipos_inscritos = c.equipos.count()
     ctx.update({"concursos": concursos})
     return render(request, "participantes_vista/part_concursos.html", ctx)
 
@@ -952,11 +951,15 @@ def part_taller_inscribir_view(request, taller_id: int):
         if capacidad_tmp is not None and inscritos_tmp >= capacidad_tmp:
             messages.error(request, "El cupo de este taller ya está lleno.")
             return redirect("part_taller_inscribir", taller_id=taller.id)
-        # Crear inscripción
+        # Nivel de desempeño desde membresía
+        mem = UserCongresoMembership.objects.filter(congreso=congreso, user=request.user, role="participante").select_related("performance_level").first()
+        perf = mem.performance_level if mem else None
+        # Crear inscripción (propagando nivel)
         TallerInscripcion.objects.create(
             congreso=congreso,
             taller=taller,
             user=request.user,
+            performance_level=perf,
         )
         messages.success(request, f"Te has inscrito al taller '{taller.title}'.", extra_tags="taller")
         return redirect("inicio_participante")
@@ -1011,9 +1014,48 @@ def part_taller_inscribir_view(request, taller_id: int):
         for v in values_qs:
             d = extra_values_by_user.setdefault(v["user_id"], {})
             d[v["field_id"]] = v["value"]
+        # Si es grupal, mapear nombre de equipo por usuario para mostrar en tabla plana
+        if active.type == "grupal" and user_ids:
+            membs = (
+                ConcursoEquipoMiembro.objects
+                .filter(equipo__concurso=active, user_id__in=user_ids)
+                .select_related("equipo")
+            )
+            team_by_user = {m.user_id: m.equipo.nombre for m in membs}
+            for ins in inscripciones:
+                setattr(ins, "team_name", team_by_user.get(ins.user_id, ""))
+
         for ins in inscripciones:
             ordered = [extra_values_by_user.get(ins.user_id, {}).get(f.id, "") for f in extra_fields]
             participantes_rows.append({"ins": ins, "values_ordered": ordered})
+        # Agrupar por equipo si el concurso es grupal
+        teams_rows = []
+        orphan_rows = []
+        if active.type == "grupal":
+            ins_by_user = {i.user_id: i for i in inscripciones}
+            equipos = (
+                ConcursoEquipo.objects.filter(concurso=active)
+                .prefetch_related("miembros__user")
+                .order_by("nombre")
+            )
+            seen_users = set()
+            for eq in equipos:
+                rows = []
+                miembros = list(eq.miembros.select_related("user").all())
+                miembros.sort(key=lambda m: (m.user.first_name or m.user.username, m.user.last_name or ""))
+                for m in miembros:
+                    ins = ins_by_user.get(m.user_id)
+                    if not ins:
+                        continue
+                    seen_users.add(m.user_id)
+                    ordered = [extra_values_by_user.get(ins.user_id, {}).get(f.id, "") for f in extra_fields]
+                    rows.append({"ins": ins, "values_ordered": ordered})
+                teams_rows.append({"equipo": eq, "rows": rows})
+            # Inscripciones sin equipo (inconsistencias)
+            for ins in inscripciones:
+                if ins.user_id not in seen_users:
+                    ordered = [extra_values_by_user.get(ins.user_id, {}).get(f.id, "") for f in extra_fields]
+                    orphan_rows.append({"ins": ins, "values_ordered": ordered})
     ctx.update({
         "extra_fields": extra_fields,
         "participantes_rows": participantes_rows,
@@ -1051,15 +1093,14 @@ def part_concurso_inscribir_view(request, concurso_id: int):
             if max_equipo < 2:
                 messages.error(request, "Este concurso grupal no tiene un tamaño de equipo válido configurado.")
                 return redirect("part_concurso_inscribir", concurso_id=concurso.id)
-            required_slots = list(range(2, max_equipo + 1))  # integrante #1 es el usuario actual
-            miembros_ids = []
-            for slot in required_slots:
+            # Slots potenciales para integrantes adicionales (2..max); pueden quedar vacíos.
+            potential_slots = list(range(2, max_equipo + 1))
+            miembros_ids: list[str] = []
+            for slot in potential_slots:
                 field = f"team_member_{slot}"
                 raw_val = (request.POST.get(field) or "").strip()
-                if not raw_val:
-                    messages.error(request, "Debes seleccionar todos los integrantes del equipo antes de inscribirte.")
-                    return redirect("part_concurso_inscribir", concurso_id=concurso.id)
-                miembros_ids.append(raw_val)
+                if raw_val:
+                    miembros_ids.append(raw_val)
             # Unicidad
             if len(set(miembros_ids)) != len(miembros_ids):
                 messages.error(request, "Cada integrante adicional debe ser único. Has repetido algún participante.")
@@ -1094,11 +1135,12 @@ def part_concurso_inscribir_view(request, concurso_id: int):
             if not team_name:
                 messages.error(request, "Debes ingresar el nombre del equipo.")
                 return redirect("part_concurso_inscribir", concurso_id=concurso.id)
-            # Capacidad considerando todos los integrantes a agregar
+            # Capacidad considerando el tamaño real solicitado (líder + adicionales)
+            team_size = 1 + len(miembros_ids)
             capacidad_tmp_check = (concurso.numero_equipos or 0) * (concurso.max_por_equipo or 0) or None
             inscritos_tmp_check = concurso.inscripciones.count()
-            if capacidad_tmp_check is not None and inscritos_tmp_check + max_equipo > capacidad_tmp_check:
-                messages.error(request, "No hay cupo suficiente para registrar un equipo completo.")
+            if capacidad_tmp_check is not None and inscritos_tmp_check + team_size > capacidad_tmp_check:
+                messages.error(request, "No hay cupo suficiente para registrar el equipo.")
                 return redirect("part_concurso_inscribir", concurso_id=concurso.id)
             # Crear equipo y miembros
             equipo = ConcursoEquipo.objects.create(
@@ -1108,13 +1150,27 @@ def part_concurso_inscribir_view(request, concurso_id: int):
                 lider=request.user,
             )
             # Miembros adicionales
+            # Pre-cargar niveles de desempeño para miembros adicionales
+            member_perfs = {
+                m.user_id: (m.performance_level_id or None)
+                for m in UserCongresoMembership.objects.filter(
+                    congreso=congreso,
+                    role="participante",
+                    user_id__in=miembros_ids,
+                ).select_related("performance_level")
+            }
             for uid in miembros_ids:
                 ConcursoEquipoMiembro.objects.create(equipo=equipo, user_id=uid)
+                ConcursoInscripcion.objects.create(
+                    congreso=congreso,
+                    concurso=concurso,
+                    user_id=uid,
+                    performance_level_id=member_perfs.get(uid),
+                )
             # Registrar líder también como miembro
             ConcursoEquipoMiembro.objects.create(equipo=equipo, user=request.user)
             # Crear inscripciones para todos (incluye al líder al final fuera del if global)
-            for uid in miembros_ids:
-                ConcursoInscripcion.objects.create(congreso=congreso, concurso=concurso, user_id=uid)
+            # (Ya creadas para adicionales arriba). Crear inscripción líder luego si no existía.
         # Capacidad
         if concurso.type == "individual":
             capacidad_tmp = concurso.cupo_maximo if concurso.cupo_maximo else None
@@ -1126,10 +1182,12 @@ def part_concurso_inscribir_view(request, concurso_id: int):
             return redirect("part_concurso_inscribir", concurso_id=concurso.id)
         # Registrar inscripción del solicitante (líder) si todavía no existe
         if not ConcursoInscripcion.objects.filter(congreso=congreso, concurso=concurso, user=request.user).exists():
+            mem = UserCongresoMembership.objects.filter(congreso=congreso, user=request.user, role="participante").select_related("performance_level").first()
             ConcursoInscripcion.objects.create(
                 congreso=congreso,
                 concurso=concurso,
                 user=request.user,
+                performance_level=mem.performance_level if mem else None,
             )
         if concurso.type == "grupal":
             messages.success(request, f"Has registrado el equipo '{team_name}' en el concurso '{concurso.title}'.", extra_tags="concurso")
@@ -1161,14 +1219,33 @@ def part_concurso_inscribir_view(request, concurso_id: int):
     equipo_participantes = []
     max_integrantes_equipo = concurso.max_por_equipo or 0
     max_integrantes_adicionales = max(0, max_integrantes_equipo - 1)  # adicionales al usuario actual
-    min_integrantes_equipo = max_integrantes_equipo if max_integrantes_equipo >= 2 else 1  # ahora mínimo = máximo para grupos
+    # Mínimo ahora siempre 1 (solo líder) para permitir equipos parciales.
+    min_integrantes_equipo = 1
     team_slots = []  # Números de integrante (2..max) para generar selects individuales
     if concurso.type == "grupal":
         # Participantes aprobados del mismo congreso, excluyéndose a sí mismo
+        miembros_qs = UserCongresoMembership.objects.filter(
+            congreso=congreso, role="participante", status="approved"
+        ).exclude(user=request.user)
+        # Excluir quienes ya están inscritos en este concurso o en otros concursos del mismo congreso
+        inscritos_este_ids = set(
+            ConcursoInscripcion.objects.filter(congreso=congreso, concurso=concurso)
+            .values_list("user_id", flat=True)
+        )
+        inscritos_otro_ids = set(
+            ConcursoInscripcion.objects.filter(congreso=congreso)
+            .exclude(concurso=concurso)
+            .values_list("user_id", flat=True)
+        )
+        en_equipo_este_ids = set(
+            ConcursoEquipoMiembro.objects.filter(equipo__concurso=concurso)
+            .values_list("user_id", flat=True)
+        )
+        excluir_ids = inscritos_este_ids.union(inscritos_otro_ids).union(en_equipo_este_ids)
+        if excluir_ids:
+            miembros_qs = miembros_qs.exclude(user_id__in=list(excluir_ids))
         miembros = (
-            UserCongresoMembership.objects
-            .filter(congreso=congreso, role="participante", status="approved")
-            .exclude(user=request.user)
+            miembros_qs
             .select_related("user")
             .order_by("user__first_name", "user__last_name", "user__username")
         )
@@ -1178,24 +1255,7 @@ def part_concurso_inscribir_view(request, concurso_id: int):
             equipo_participantes.append({"id": m.user_id, "name": nombre, "email": correo, "display": f"{nombre} ({correo})"})
         if max_integrantes_equipo >= 2:
             team_slots = list(range(2, max_integrantes_equipo + 1))
-    ctx.update({
-        "concurso": concurso,
-        "inscritos": inscritos,
-        "capacidad": capacidad,
-        "ya_inscrito": ya_inscrito,
-        "otro_concurso_inscrito": otro_concurso_inscrito,
-        "equipos_inscritos": equipos_inscritos,
-        "prev_concurso": prev_concurso,
-        "next_concurso": next_concurso,
-        # Equipo UI
-        "equipo_participantes": equipo_participantes,
-        "max_integrantes_equipo": max_integrantes_equipo,
-        "max_integrantes_adicionales": max_integrantes_adicionales,
-        "min_integrantes_equipo": min_integrantes_equipo,
-        "team_slots": team_slots,
-        "required_integrantes_adicionales": max(0, max_integrantes_equipo - 1),
-    })
-    # Datos completos de participantes (nombre, correo, nivel y campos extra dinámicos)
+    # Preparar datos completos de participantes y campos extra antes de agrupar
     extra_fields = []
     participantes_rows = []
     team_by_user = {}
@@ -1221,21 +1281,70 @@ def part_concurso_inscribir_view(request, concurso_id: int):
         for v in values_qs:
             d = extra_values_by_user.setdefault(v["user_id"], {})
             d[v["field_id"]] = v["value"]
-        # Si es grupal, mapear equipo por usuario
-        if concurso.type == "grupal" and user_ids:
-            membs = (
-                ConcursoEquipoMiembro.objects
-                .filter(equipo__concurso=concurso, user_id__in=user_ids)
-                .select_related("equipo")
-            )
-            for m in membs:
-                team_by_user[m.user_id] = m.equipo.nombre if m.equipo and m.equipo.nombre else ""
+    # Agrupar por equipo para la vista de participantes (listado por equipo)
+    teams_rows = []
+    orphan_rows = []
+    if concurso.type == "grupal" and congreso:
+        ins_by_user = {i.user_id: i for i in inscripciones}
+        equipos = (
+            ConcursoEquipo.objects.filter(concurso=concurso)
+            .prefetch_related("miembros__user")
+            .order_by("nombre")
+        )
+        seen_users = set()
+        for eq in equipos:
+            rows = []
+            miembros = list(eq.miembros.select_related("user").all())
+            miembros.sort(key=lambda m: (m.user.first_name or m.user.username, m.user.last_name or ""))
+            for m in miembros:
+                ins = ins_by_user.get(m.user_id)
+                if not ins:
+                    continue
+                seen_users.add(m.user_id)
+                ordered = [extra_values_by_user.get(ins.user_id, {}).get(f.id, "") for f in extra_fields]
+                rows.append({"ins": ins, "values_ordered": ordered})
+            teams_rows.append({"equipo": eq, "rows": rows})
         for ins in inscripciones:
-            ordered = [extra_values_by_user.get(ins.user_id, {}).get(f.id, "") for f in extra_fields]
-            row = {"ins": ins, "values_ordered": ordered}
-            if concurso.type == "grupal":
-                row["team_name"] = team_by_user.get(ins.user_id, "")
-            participantes_rows.append(row)
+            if ins.user_id not in seen_users:
+                ordered = [extra_values_by_user.get(ins.user_id, {}).get(f.id, "") for f in extra_fields]
+                orphan_rows.append({"ins": ins, "values_ordered": ordered})
+
+    ctx.update({
+        "concurso": concurso,
+        "inscritos": inscritos,
+        "capacidad": capacidad,
+        "ya_inscrito": ya_inscrito,
+        "otro_concurso_inscrito": otro_concurso_inscrito,
+        "equipos_inscritos": equipos_inscritos,
+        "prev_concurso": prev_concurso,
+        "next_concurso": next_concurso,
+        # Equipo UI
+        "equipo_participantes": equipo_participantes,
+        "max_integrantes_equipo": max_integrantes_equipo,
+        "max_integrantes_adicionales": max_integrantes_adicionales,
+        "min_integrantes_equipo": min_integrantes_equipo,
+        "team_slots": team_slots,
+        # Ya no se requieren integrantes adicionales explícitos.
+        "required_integrantes_adicionales": 0,
+        # Listado agrupado
+        "teams_rows": teams_rows,
+        "orphan_rows": orphan_rows,
+    })
+    # Si es grupal, mapear equipo por usuario
+    if concurso.type == "grupal" and user_ids:
+        membs = (
+            ConcursoEquipoMiembro.objects
+            .filter(equipo__concurso=concurso, user_id__in=user_ids)
+            .select_related("equipo")
+        )
+        for m in membs:
+            team_by_user[m.user_id] = m.equipo.nombre if m.equipo and m.equipo.nombre else ""
+    for ins in inscripciones:
+        ordered = [extra_values_by_user.get(ins.user_id, {}).get(f.id, "") for f in extra_fields]
+        row = {"ins": ins, "values_ordered": ordered}
+        if concurso.type == "grupal":
+            row["team_name"] = team_by_user.get(ins.user_id, "")
+        participantes_rows.append(row)
     ctx.update({
         "extra_fields": extra_fields,
         "participantes_rows": participantes_rows,
@@ -1272,10 +1381,14 @@ def part_conferencia_inscribir_view(request, conferencia_id: int):
         if capacidad_tmp is not None and inscritos_tmp >= capacidad_tmp:
             messages.error(request, "El cupo de esta conferencia ya está lleno.")
             return redirect("part_conferencia_inscribir", conferencia_id=conferencia.id)
+        from .models import UserCongresoMembership
+        mem = UserCongresoMembership.objects.filter(congreso=congreso, user=request.user, role="participante").select_related("performance_level").first()
+        perf = mem.performance_level if mem else None
         ConferenciaInscripcion.objects.create(
             congreso=congreso,
             conferencia=conferencia,
             user=request.user,
+            performance_level=perf,
         )
         messages.success(request, f"Te has inscrito a la conferencia '{conferencia.title}'.", extra_tags="conferencia")
         return redirect("inicio_participante")
@@ -1755,6 +1868,8 @@ def instructor_talleres_view(request):
     taller_capacidad = active.cupo_maximo if active and active.cupo_maximo else None
     # Listado embebido con datos completos de participantes
     participantes_rows = []
+    teams_rows = []
+    orphan_rows = []
     extra_fields = []
     if active:
         inscripciones = list(active.inscripciones.select_related("user", "performance_level"))
@@ -1781,6 +1896,32 @@ def instructor_talleres_view(request):
         for ins in inscripciones:
             ordered = [extra_values_by_user.get(ins.user_id, {}).get(f.id, "") for f in extra_fields]
             participantes_rows.append({"ins": ins, "values_ordered": ordered})
+        # Agrupar por equipo cuando sea grupal
+        if active.type == "grupal":
+            ins_by_user = {i.user_id: i for i in inscripciones}
+            equipos = (
+                ConcursoEquipo.objects.filter(concurso=active)
+                .prefetch_related("miembros__user")
+                .order_by("nombre")
+            )
+            seen_users = set()
+            for eq in equipos:
+                rows = []
+                miembros = list(eq.miembros.select_related("user").all())
+                miembros.sort(key=lambda m: (m.user.first_name or m.user.username, m.user.last_name or ""))
+                for m in miembros:
+                    ins = ins_by_user.get(m.user_id)
+                    if not ins:
+                        continue
+                    seen_users.add(m.user_id)
+                    ordered = [extra_values_by_user.get(ins.user_id, {}).get(f.id, "") for f in extra_fields]
+                    rows.append({"ins": ins, "values_ordered": ordered})
+                teams_rows.append({"equipo": eq, "rows": rows})
+            # Inscripciones sin equipo (inconsistencias)
+            for ins in inscripciones:
+                if ins.user_id not in seen_users:
+                    ordered = [extra_values_by_user.get(ins.user_id, {}).get(f.id, "") for f in extra_fields]
+                    orphan_rows.append({"ins": ins, "values_ordered": ordered})
     ctx = {
         "congreso": congreso,
         "talleres": list(talleres_qs),
@@ -1852,6 +1993,7 @@ def instructor_concursos_view(request):
             messages.error(request, "No tienes permisos para eliminar este concurso.")
         return redirect("ins_concursos")
     concurso_inscritos = active.inscripciones.count() if active else 0
+    equipos_inscritos = None
     if active:
         if active.type == "individual":
             concurso_capacidad = active.cupo_maximo if active.cupo_maximo else None
@@ -1860,10 +2002,14 @@ def instructor_concursos_view(request):
                 concurso_capacidad = active.numero_equipos * active.max_por_equipo
             else:
                 concurso_capacidad = None
+            # Contar equipos reales inscritos para concursos grupales
+            equipos_inscritos = ConcursoEquipo.objects.filter(concurso=active).count()
     else:
         concurso_capacidad = None
     # Listado embebido con datos completos de participantes
     participantes_rows = []
+    teams_rows = []
+    orphan_rows = []
     extra_fields = []
     if active:
         inscripciones = list(active.inscripciones.select_related("user", "performance_level"))
@@ -1890,14 +2036,43 @@ def instructor_concursos_view(request):
         for ins in inscripciones:
             ordered = [extra_values_by_user.get(ins.user_id, {}).get(f.id, "") for f in extra_fields]
             participantes_rows.append({"ins": ins, "values_ordered": ordered})
+        # Agrupar por equipo para concursos grupales
+        if active.type == "grupal":
+            ins_by_user = {i.user_id: i for i in inscripciones}
+            equipos = (
+                ConcursoEquipo.objects.filter(concurso=active)
+                .prefetch_related("miembros__user")
+                .order_by("nombre")
+            )
+            seen_users = set()
+            for eq in equipos:
+                rows = []
+                miembros = list(eq.miembros.select_related("user").all())
+                miembros.sort(key=lambda m: ((m.user.first_name or m.user.username), (m.user.last_name or "")))
+                for m in miembros:
+                    ins = ins_by_user.get(m.user_id)
+                    if not ins:
+                        continue
+                    seen_users.add(m.user_id)
+                    ordered = [extra_values_by_user.get(ins.user_id, {}).get(f.id, "") for f in extra_fields]
+                    rows.append({"ins": ins, "values_ordered": ordered})
+                teams_rows.append({"equipo": eq, "rows": rows})
+            # Cualquier inscripción sin equipo (inconsistencias) -> bloque "Sin equipo"
+            for ins in inscripciones:
+                if ins.user_id not in seen_users:
+                    ordered = [extra_values_by_user.get(ins.user_id, {}).get(f.id, "") for f in extra_fields]
+                    orphan_rows.append({"ins": ins, "values_ordered": ordered})
     ctx = {
         "congreso": congreso,
         "concursos": list(concursos_qs),
         "concurso": active,
         "concurso_inscritos": concurso_inscritos,
         "concurso_capacidad": concurso_capacidad,
+        "equipos_inscritos": equipos_inscritos,
         "extra_fields": extra_fields,
         "participantes_rows": participantes_rows,
+        "teams_rows": teams_rows,
+        "orphan_rows": orphan_rows,
         "creation_mode": nuevo_flag,
     }
     return render(request, "instructores_vista/ins_concurso.html", ctx)
@@ -2262,29 +2437,203 @@ def instructor_concurso_participantes_view(request):
     for v in values_qs:
         d = extra_values_by_user.setdefault(v["user_id"], {})
         d[v["field_id"]] = v["value"]
-    if request.method == "POST" and puede_remover and request.POST.get("action") == "remove":
-        insc_id = request.POST.get("insc_id")
-        try:
-            ins = concurso.inscripciones.get(pk=insc_id)
-            ins.delete()
-            messages.success(request, "Participante removido del concurso.")
+    # Acciones de eliminación (participante o equipo completo) y edición de equipo
+    if request.method == "POST" and puede_remover:
+        action = request.POST.get("action")
+        if action == "remove":
+            insc_id = request.POST.get("insc_id")
+            try:
+                ins = concurso.inscripciones.get(pk=insc_id)
+                user_id = ins.user_id
+                ins.delete()
+                # Si pertenece a un equipo de este concurso, removerlo y borrar el equipo si queda vacío
+                try:
+                    memb = ConcursoEquipoMiembro.objects.filter(equipo__concurso=concurso, user_id=user_id).select_related("equipo").first()
+                    if memb:
+                        equipo = memb.equipo
+                        memb.delete()
+                        if equipo.miembros.count() == 0:
+                            equipo.delete()
+                except Exception:
+                    pass
+                messages.success(request, "Participante removido del concurso.")
+                return redirect("ins_concurso_participantes")
+            except Exception:
+                messages.error(request, "No se pudo remover la inscripción.")
+        elif action == "remove_team":
+            team_id = request.POST.get("team_id")
+            try:
+                equipo = ConcursoEquipo.objects.get(pk=team_id, concurso=concurso)
+                member_user_ids = list(equipo.miembros.values_list("user_id", flat=True))
+                ConcursoInscripcion.objects.filter(concurso=concurso, user_id__in=member_user_ids).delete()
+                ConcursoEquipoMiembro.objects.filter(equipo=equipo).delete()
+                equipo.delete()
+                messages.success(request, "Equipo eliminado por completo del concurso.")
+                return redirect("ins_concurso_participantes")
+            except ConcursoEquipo.DoesNotExist:
+                messages.error(request, "El equipo no existe o ya fue eliminado.")
+        elif action == "edit_team":
+            team_id = request.POST.get("team_id")
+            team_name = (request.POST.get("team_name") or "").strip()
+            try:
+                equipo = ConcursoEquipo.objects.get(pk=team_id, concurso=concurso)
+            except ConcursoEquipo.DoesNotExist:
+                messages.error(request, "El equipo no existe.")
+                return redirect("ins_concurso_participantes")
+            # Recoger integrantes deseados (slots 1..max). slot 1 es el líder editable
+            max_eq = concurso.max_por_equipo or 0
+            desired_ids: list[str] = []
+            new_leader = (request.POST.get("team_member_1") or str(equipo.lider_id)).strip()
+            if not new_leader:
+                messages.error(request, "Debes seleccionar un líder para el equipo.")
+                return redirect("ins_concurso_participantes")
+            desired_ids.append(new_leader)
+            for slot in range(2, max_eq + 1):
+                v = (request.POST.get(f"team_member_{slot}") or "").strip()
+                if v:
+                    desired_ids.append(v)
+            # Validaciones básicas
+            if len(set(desired_ids)) != len(desired_ids):
+                messages.error(request, "Los integrantes seleccionados deben ser únicos.")
+                return redirect("ins_concurso_participantes")
+            if max_eq and len(desired_ids) > max_eq:
+                messages.error(request, "Se supera el máximo de integrantes por equipo.")
+                return redirect("ins_concurso_participantes")
+            # No deben estar inscritos en otros concursos o en otro equipo de este concurso
+            conflict_other = ConcursoInscripcion.objects.filter(congreso=congreso, user_id__in=desired_ids).exclude(concurso=concurso)
+            if conflict_other.exists():
+                messages.error(request, "Alguno de los integrantes ya está inscrito en otro concurso.")
+                return redirect("ins_concurso_participantes")
+            conflict_team = ConcursoEquipoMiembro.objects.filter(equipo__concurso=concurso, user_id__in=desired_ids).exclude(equipo=equipo)
+            if conflict_team.exists():
+                messages.error(request, "Alguno de los integrantes ya está en otro equipo de este concurso.")
+                return redirect("ins_concurso_participantes")
+            # Actualizar nombre y líder si aplica
+            if team_name and team_name != equipo.nombre:
+                equipo.nombre = team_name
+                try:
+                    equipo.save()
+                except Exception:
+                    messages.error(request, "No se pudo actualizar el nombre del equipo (¿duplicado?).")
+                    return redirect("ins_concurso_participantes")
+            # Actualizar líder
+            new_leader_id_int = int(new_leader)
+            if equipo.lider_id != new_leader_id_int:
+                equipo.lider_id = new_leader_id_int
+                try:
+                    equipo.save(update_fields=["lider_id"])
+                except Exception:
+                    messages.error(request, "No se pudo actualizar el líder del equipo.")
+                    return redirect("ins_concurso_participantes")
+            # Sincronizar miembros e inscripciones
+            current_ids = set(equipo.miembros.values_list("user_id", flat=True))
+            desired_set = set(map(int, desired_ids))
+            to_add = list(desired_set - current_ids)
+            to_remove = list(current_ids - desired_set)
+            # Agregar
+            for uid in to_add:
+                ConcursoEquipoMiembro.objects.create(equipo=equipo, user_id=uid)
+                if not ConcursoInscripcion.objects.filter(concurso=concurso, concurso_id=concurso.id, user_id=uid).exists():
+                    mem = UserCongresoMembership.objects.filter(congreso=congreso, user_id=uid, role="participante").select_related("performance_level").first()
+                    ConcursoInscripcion.objects.create(congreso=congreso, concurso=concurso, user_id=uid, performance_level=mem.performance_level if mem else None)
+            # Remover
+            if to_remove:
+                ConcursoEquipoMiembro.objects.filter(equipo=equipo, user_id__in=to_remove).delete()
+                ConcursoInscripcion.objects.filter(concurso=concurso, user_id__in=to_remove).delete()
+            messages.success(request, "Equipo actualizado correctamente.")
             return redirect("ins_concurso_participantes")
-        except Exception:
-            messages.error(request, "No se pudo remover la inscripción.")
+    # Mapear equipo por usuario para concursos grupales y anotar en inscripciones
+    team_by_user: dict[int, str] = {}
+    team_id_by_user: dict[int, int] = {}
+    if concurso.type == "grupal":
+        uid_list = [ins.user_id for ins in inscripciones] or [0]
+        membs = (
+            ConcursoEquipoMiembro.objects
+            .filter(equipo__concurso=concurso, user_id__in=uid_list)
+            .select_related("equipo")
+        )
+        for m in membs:
+            team_by_user[m.user_id] = m.equipo.nombre
+            team_id_by_user[m.user_id] = m.equipo_id
+        for ins in inscripciones:
+            setattr(ins, "team_name", team_by_user.get(ins.user_id, ""))
+            setattr(ins, "team_id", team_id_by_user.get(ins.user_id))
+
     participantes_rows = []
     for ins in inscripciones:
         ordered = []
         for f in extra_fields:
             ordered.append(extra_values_by_user.get(ins.user_id, {}).get(f.id, ""))
         participantes_rows.append({"ins": ins, "values_ordered": ordered})
+
+    # Agrupar por equipo si es grupal y preparar datos para edición
+    teams_rows = []
+    orphan_rows = []
+    team_members_map: dict[int, list] = {}
+    team_prefill_map: dict[int, dict[int, dict]] = {}
+    if concurso.type == "grupal":
+        ins_by_user = {i.user_id: i for i in inscripciones}
+        equipos = (
+            ConcursoEquipo.objects.filter(concurso=concurso)
+            .prefetch_related("miembros__user")
+            .order_by("nombre")
+        )
+        seen_users = set()
+        for eq in equipos:
+            rows = []
+            miembros = list(eq.miembros.select_related("user").all())
+            miembros.sort(key=lambda m: (m.user.first_name or m.user.username, m.user.last_name or ""))
+            team_members_map[eq.id] = miembros
+            # Prefill: mapear slot (2..max) a miembro actual (excluye líder)
+            prefill = {}
+            non_leaders = [m for m in miembros if m.user_id != eq.lider_id]
+            max_eq = concurso.max_por_equipo or 0
+            for idx, m in enumerate(non_leaders, start=2):
+                if idx > max_eq:
+                    break
+                nombre = m.user.get_full_name() or m.user.username
+                prefill[idx] = {"id": m.user_id, "display": f"{nombre} ({m.user.email or 'sin-correo'})"}
+            team_prefill_map[eq.id] = prefill
+            for m in miembros:
+                ins = ins_by_user.get(m.user_id)
+                if not ins:
+                    continue
+                seen_users.add(m.user_id)
+                ordered = [extra_values_by_user.get(ins.user_id, {}).get(f.id, "") for f in extra_fields]
+                rows.append({"ins": ins, "values_ordered": ordered})
+            teams_rows.append({"equipo": eq, "rows": rows})
+        # Cualquier inscripción sin equipo (inconsistencias)
+        for ins in inscripciones:
+            if ins.user_id not in seen_users:
+                ordered = [extra_values_by_user.get(ins.user_id, {}).get(f.id, "") for f in extra_fields]
+                orphan_rows.append({"ins": ins, "values_ordered": ordered})
     ctx = {
         "congreso": congreso,
         "concurso": concurso,
         "inscripciones": inscripciones,
         "participantes_rows": participantes_rows,
+        "teams_rows": teams_rows,
+        "orphan_rows": orphan_rows,
         "puede_remover": puede_remover,
         "extra_fields": extra_fields,
+        "max_integrantes_equipo": concurso.max_por_equipo or 0,
     }
+    # Opciones para agregar integrantes (excluye ocupados en otros concursos o equipos de este concurso)
+    if concurso.type == "grupal":
+        base_qs = UserCongresoMembership.objects.filter(congreso=congreso, role="participante", status="approved").select_related("user")
+        ocupados_ids = set(ConcursoInscripcion.objects.filter(congreso=congreso).exclude(concurso=concurso).values_list("user_id", flat=True))
+        ocupados_ids |= set(ConcursoEquipoMiembro.objects.filter(equipo__concurso=concurso).values_list("user_id", flat=True))
+        options = base_qs.exclude(user_id__in=list(ocupados_ids)).order_by("user__first_name", "user__last_name", "user__username")
+        equipo_participantes_options = [
+            {"id": m.user_id, "display": f"{(m.user.get_full_name() or m.user.username)} ({m.user.email or 'sin-correo'})"}
+            for m in options
+        ]
+        ctx.update({
+            "equipo_participantes_options": equipo_participantes_options,
+            "team_members_map": team_members_map,
+            "team_prefill_map": team_prefill_map,
+            "team_slots": list(range(2, (concurso.max_por_equipo or 0) + 1)),
+        })
     return render(request, "instructores_vista/ins_concurso_participantes.html", ctx)
 
 @login_required
@@ -3991,11 +4340,21 @@ def export_talleres_excel_view(request, congreso_id: int):
 
     # Función para normalizar (quitar acentos / diacríticos)
     import unicodedata
+    import html as _html
+    import re as _re
+    from django.utils.html import strip_tags as _strip_tags
     def _normalize(text: str | None) -> str:
         if not text:
             return ""
         # NFD separa caracteres base y marcas; filtramos las marcas (categoria Mn)
         return "".join(c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn")
+    def _plain(text: str | None) -> str:
+        if not text:
+            return ""
+        s = _strip_tags(str(text))
+        s = _html.unescape(s)
+        s = _re.sub(r"\s+", " ", s).strip()
+        return s
 
     # Preparar workbook (openpyxl). Si no está disponible (ImportError), retornar CSV como fallback.
     try:
@@ -4023,20 +4382,45 @@ def export_talleres_excel_view(request, congreso_id: int):
                 _normalize(t.title),
                 _normalize(t.lugar or ""),
                 t.cupo_maximo if t.cupo_maximo is not None else "",
-                _normalize(t.description or ""),
+                _normalize(_plain(t.description) or ""),
                 instructor.id if instructor else "",
                 _normalize((instructor.first_name or instructor.username) if instructor else ""),
                 _normalize((instructor.email or instructor.username) if instructor else ""),
             ])
-        # Ajuste sencillo de ancho de columnas
-        for col in ws.columns:
-            max_len = 0
+        # Ajuste de ancho: forzar columna Descripcion a 30 y envolver texto
+        from openpyxl.styles import Alignment, Font, Border, Side
+        from openpyxl.comments import Comment
+        # Formato de columnas: descripcion envuelta y ancho fijo
+        for i, col in enumerate(ws.iter_cols(min_row=1, max_row=ws.max_row), start=1):
             col_letter = col[0].column_letter
-            for cell in col:
-                val = str(cell.value) if cell.value is not None else ""
-                if len(val) > max_len:
-                    max_len = len(val)
-            ws.column_dimensions[col_letter].width = min(max_len + 2, 50)
+            if i == 6:  # Descripcion
+                ws.column_dimensions[col_letter].width = 30
+                for cell in col:
+                    cell.alignment = Alignment(wrap_text=True, vertical="top")
+            else:
+                max_len = 0
+                for cell in col:
+                    val = str(cell.value) if cell.value is not None else ""
+                    if len(val) > max_len:
+                        max_len = len(val)
+                ws.column_dimensions[col_letter].width = min(max_len + 2, 50)
+        # Encabezados en negrita y bordes
+        thin = Side(style="thin", color="000000")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+            cell.border = border
+        # Altura de filas para mostrar ~3 líneas y añadir comentario con el texto completo
+        for r in range(2, ws.max_row + 1):
+            ws.row_dimensions[r].height = 45
+            for c in range(1, ws.max_column + 1):
+                ws.cell(row=r, column=c).border = border
+            dc = ws.cell(row=r, column=6)
+            if dc.value:
+                try:
+                    dc.comment = Comment(text=str(dc.value), author="")
+                except Exception:
+                    pass
         response = HttpResponse(
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
@@ -4067,7 +4451,7 @@ def export_talleres_excel_view(request, congreso_id: int):
                 _normalize(t.title),
                 _normalize(t.lugar or ""),
                 t.cupo_maximo if t.cupo_maximo is not None else "",
-                _normalize((t.description or "").replace("\n"," ").strip()),
+                _normalize(_plain(t.description)),
                 instructor.id if instructor else "",
                 _normalize((instructor.first_name or instructor.username) if instructor else ""),
                 _normalize((instructor.email or instructor.username) if instructor else ""),
@@ -4109,10 +4493,20 @@ def export_conferencias_excel_view(request, congreso_id: int):
     )
 
     import unicodedata
+    import html as _html
+    import re as _re
+    from django.utils.html import strip_tags as _strip_tags
     def _normalize(text: str | None) -> str:
         if not text:
             return ""
         return "".join(c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn")
+    def _plain(text: str | None) -> str:
+        if not text:
+            return ""
+        s = _strip_tags(str(text))
+        s = _html.unescape(s)
+        s = _re.sub(r"\s+", " ", s).strip()
+        return s
 
     try:
         from openpyxl import Workbook
@@ -4139,19 +4533,41 @@ def export_conferencias_excel_view(request, congreso_id: int):
                 _normalize(c.title),
                 _normalize(c.lugar or ""),
                 c.cupo_maximo if c.cupo_maximo is not None else "",
-                _normalize(c.description or ""),
+                _normalize(_plain(c.description) or ""),
                 instructor.id if instructor else "",
                 _normalize((instructor.first_name or instructor.username) if instructor else ""),
                 _normalize((instructor.email or instructor.username) if instructor else ""),
             ])
-        for col in ws.columns:
-            max_len = 0
+        from openpyxl.styles import Alignment, Font, Border, Side
+        from openpyxl.comments import Comment
+        for i, col in enumerate(ws.iter_cols(min_row=1, max_row=ws.max_row), start=1):
             col_letter = col[0].column_letter
-            for cell in col:
-                val = str(cell.value) if cell.value is not None else ""
-                if len(val) > max_len:
-                    max_len = len(val)
-            ws.column_dimensions[col_letter].width = min(max_len + 2, 50)
+            if i == 6:  # Descripcion
+                ws.column_dimensions[col_letter].width = 30
+                for cell in col:
+                    cell.alignment = Alignment(wrap_text=True, vertical="top")
+            else:
+                max_len = 0
+                for cell in col:
+                    val = str(cell.value) if cell.value is not None else ""
+                    if len(val) > max_len:
+                        max_len = len(val)
+                ws.column_dimensions[col_letter].width = min(max_len + 2, 50)
+        thin = Side(style="thin", color="000000")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+            cell.border = border
+        for r in range(2, ws.max_row + 1):
+            ws.row_dimensions[r].height = 45
+            for c in range(1, ws.max_column + 1):
+                ws.cell(row=r, column=c).border = border
+            dc = ws.cell(row=r, column=6)
+            if dc.value:
+                try:
+                    dc.comment = Comment(text=str(dc.value), author="")
+                except Exception:
+                    pass
         response = HttpResponse(
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
@@ -4181,7 +4597,7 @@ def export_conferencias_excel_view(request, congreso_id: int):
                 _normalize(c.title),
                 _normalize(c.lugar or ""),
                 c.cupo_maximo if c.cupo_maximo is not None else "",
-                _normalize((c.description or "").replace("\n"," ").strip()),
+                _normalize(_plain(c.description)),
                 instructor.id if instructor else "",
                 _normalize((instructor.first_name or instructor.username) if instructor else ""),
                 _normalize((instructor.email or instructor.username) if instructor else ""),
@@ -4226,10 +4642,20 @@ def export_concursos_excel_view(request, congreso_id: int):
     )
 
     import unicodedata
+    import html as _html
+    import re as _re
+    from django.utils.html import strip_tags as _strip_tags
     def _normalize(text: str | None) -> str:
         if not text:
             return ""
         return "".join(c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn")
+    def _plain(text: str | None) -> str:
+        if not text:
+            return ""
+        s = _strip_tags(str(text))
+        s = _html.unescape(s)
+        s = _re.sub(r"\s+", " ", s).strip()
+        return s
 
     try:
         from openpyxl import Workbook
@@ -4263,7 +4689,7 @@ def export_concursos_excel_view(request, congreso_id: int):
                 _normalize(x.title),
                 _normalize(x.type),
                 _normalize(x.lugar or ""),
-                _normalize(x.description or ""),
+                _normalize(_plain(x.description) or ""),
                 instructor.id if instructor else "",
                 _normalize((instructor.first_name or instructor.username) if instructor else ""),
                 _normalize((instructor.email or instructor.username) if instructor else ""),
@@ -4271,14 +4697,36 @@ def export_concursos_excel_view(request, congreso_id: int):
                 n_equipos,
                 max_equipo,
             ])
-        for col in ws.columns:
-            max_len = 0
+        from openpyxl.styles import Alignment, Font, Border, Side
+        from openpyxl.comments import Comment
+        for i, col in enumerate(ws.iter_cols(min_row=1, max_row=ws.max_row), start=1):
             col_letter = col[0].column_letter
-            for cell in col:
-                val = str(cell.value) if cell.value is not None else ""
-                if len(val) > max_len:
-                    max_len = len(val)
-            ws.column_dimensions[col_letter].width = min(max_len + 2, 50)
+            if i == 6:  # Descripcion
+                ws.column_dimensions[col_letter].width = 30
+                for cell in col:
+                    cell.alignment = Alignment(wrap_text=True, vertical="top")
+            else:
+                max_len = 0
+                for cell in col:
+                    val = str(cell.value) if cell.value is not None else ""
+                    if len(val) > max_len:
+                        max_len = len(val)
+                ws.column_dimensions[col_letter].width = min(max_len + 2, 50)
+        thin = Side(style="thin", color="000000")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+            cell.border = border
+        for r in range(2, ws.max_row + 1):
+            ws.row_dimensions[r].height = 45
+            for c in range(1, ws.max_column + 1):
+                ws.cell(row=r, column=c).border = border
+            dc = ws.cell(row=r, column=6)
+            if dc.value:
+                try:
+                    dc.comment = Comment(text=str(dc.value), author="")
+                except Exception:
+                    pass
         response = HttpResponse(
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
@@ -4315,7 +4763,7 @@ def export_concursos_excel_view(request, congreso_id: int):
                 _normalize(x.title),
                 _normalize(x.type),
                 _normalize(x.lugar or ""),
-                _normalize((x.description or "").replace("\n"," ").strip()),
+                _normalize(_plain(x.description)),
                 instructor.id if instructor else "",
                 _normalize((instructor.first_name or instructor.username) if instructor else ""),
                 _normalize((instructor.email or instructor.username) if instructor else ""),
@@ -4347,10 +4795,20 @@ def export_taller_excel_view(request, congreso_id: int, taller_id: int):
         return redirect("talleres_list", congreso.id)
 
     import unicodedata
+    import html as _html
+    import re as _re
+    from django.utils.html import strip_tags as _strip_tags
     def _normalize(text: str | None) -> str:
         if not text:
             return ""
         return "".join(c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn")
+    def _plain(text: str | None) -> str:
+        if not text:
+            return ""
+        s = _strip_tags(str(text))
+        s = _html.unescape(s)
+        s = _re.sub(r"\s+", " ", s).strip()
+        return s
 
     try:
         from openpyxl import Workbook
@@ -4376,19 +4834,41 @@ def export_taller_excel_view(request, congreso_id: int, taller_id: int):
             _normalize(taller.title),
             _normalize(taller.lugar or ""),
             taller.cupo_maximo if taller.cupo_maximo is not None else "",
-            _normalize(taller.description or ""),
+            _normalize(_plain(taller.description) or ""),
             inst.id if inst else "",
             _normalize((inst.first_name or inst.username) if inst else ""),
             _normalize((inst.email or inst.username) if inst else ""),
         ])
-        for col in ws.columns:
-            max_len = 0
+        from openpyxl.styles import Alignment, Font, Border, Side
+        from openpyxl.comments import Comment
+        for i, col in enumerate(ws.iter_cols(min_row=1, max_row=ws.max_row), start=1):
             col_letter = col[0].column_letter
-            for cell in col:
-                val = str(cell.value) if cell.value is not None else ""
-                if len(val) > max_len:
-                    max_len = len(val)
-            ws.column_dimensions[col_letter].width = min(max_len + 2, 50)
+            if i == 6:
+                ws.column_dimensions[col_letter].width = 30
+                for cell in col:
+                    cell.alignment = Alignment(wrap_text=True, vertical="top")
+            else:
+                max_len = 0
+                for cell in col:
+                    val = str(cell.value) if cell.value is not None else ""
+                    if len(val) > max_len:
+                        max_len = len(val)
+                ws.column_dimensions[col_letter].width = min(max_len + 2, 50)
+        thin = Side(style="thin", color="000000")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+            cell.border = border
+        for r in range(2, ws.max_row + 1):
+            ws.row_dimensions[r].height = 45
+            for c in range(1, ws.max_column + 1):
+                ws.cell(row=r, column=c).border = border
+            dc = ws.cell(row=r, column=6)
+            if dc.value:
+                try:
+                    dc.comment = Comment(text=str(dc.value), author="")
+                except Exception:
+                    pass
         response = HttpResponse(
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
@@ -4418,7 +4898,7 @@ def export_taller_excel_view(request, congreso_id: int, taller_id: int):
             _normalize(taller.title),
             _normalize(taller.lugar or ""),
             taller.cupo_maximo if taller.cupo_maximo is not None else "",
-            _normalize((taller.description or "").replace("\n"," ").strip()),
+            _normalize(_plain(taller.description)),
             inst.id if inst else "",
             _normalize((inst.first_name or inst.username) if inst else ""),
             _normalize((inst.email or inst.username) if inst else ""),
@@ -4447,10 +4927,20 @@ def export_conferencia_excel_view(request, congreso_id: int, conferencia_id: int
         return redirect("conferencias_list", congreso.id)
 
     import unicodedata
+    import html as _html
+    import re as _re
+    from django.utils.html import strip_tags as _strip_tags
     def _normalize(text: str | None) -> str:
         if not text:
             return ""
         return "".join(c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn")
+    def _plain(text: str | None) -> str:
+        if not text:
+            return ""
+        s = _strip_tags(str(text))
+        s = _html.unescape(s)
+        s = _re.sub(r"\s+", " ", s).strip()
+        return s
 
     try:
         from openpyxl import Workbook
@@ -4476,19 +4966,41 @@ def export_conferencia_excel_view(request, congreso_id: int, conferencia_id: int
             _normalize(conferencia.title),
             _normalize(conferencia.lugar or ""),
             conferencia.cupo_maximo if conferencia.cupo_maximo is not None else "",
-            _normalize(conferencia.description or ""),
+            _normalize(_plain(conferencia.description) or ""),
             inst.id if inst else "",
             _normalize((inst.first_name or inst.username) if inst else ""),
             _normalize((inst.email or inst.username) if inst else ""),
         ])
-        for col in ws.columns:
-            max_len = 0
+        from openpyxl.styles import Alignment, Font, Border, Side
+        from openpyxl.comments import Comment
+        for i, col in enumerate(ws.iter_cols(min_row=1, max_row=ws.max_row), start=1):
             col_letter = col[0].column_letter
-            for cell in col:
-                val = str(cell.value) if cell.value is not None else ""
-                if len(val) > max_len:
-                    max_len = len(val)
-            ws.column_dimensions[col_letter].width = min(max_len + 2, 50)
+            if i == 6:
+                ws.column_dimensions[col_letter].width = 30
+                for cell in col:
+                    cell.alignment = Alignment(wrap_text=True, vertical="top")
+            else:
+                max_len = 0
+                for cell in col:
+                    val = str(cell.value) if cell.value is not None else ""
+                    if len(val) > max_len:
+                        max_len = len(val)
+                ws.column_dimensions[col_letter].width = min(max_len + 2, 50)
+        thin = Side(style="thin", color="000000")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+            cell.border = border
+        for r in range(2, ws.max_row + 1):
+            ws.row_dimensions[r].height = 45
+            for c in range(1, ws.max_column + 1):
+                ws.cell(row=r, column=c).border = border
+            dc = ws.cell(row=r, column=6)
+            if dc.value:
+                try:
+                    dc.comment = Comment(text=str(dc.value), author="")
+                except Exception:
+                    pass
         response = HttpResponse(
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
@@ -4518,7 +5030,7 @@ def export_conferencia_excel_view(request, congreso_id: int, conferencia_id: int
             _normalize(conferencia.title),
             _normalize(conferencia.lugar or ""),
             conferencia.cupo_maximo if conferencia.cupo_maximo is not None else "",
-            _normalize((conferencia.description or "").replace("\n"," ").strip()),
+            _normalize(_plain(conferencia.description)),
             inst.id if inst else "",
             _normalize((inst.first_name or inst.username) if inst else ""),
             _normalize((inst.email or inst.username) if inst else ""),
@@ -4547,10 +5059,20 @@ def export_concurso_excel_view(request, congreso_id: int, concurso_id: int):
         return redirect("concursos_list", congreso.id)
 
     import unicodedata
+    import html as _html
+    import re as _re
+    from django.utils.html import strip_tags as _strip_tags
     def _normalize(text: str | None) -> str:
         if not text:
             return ""
         return "".join(c for c in unicodedata.normalize("NFD", text) if unicodedata.category(c) != "Mn")
+    def _plain(text: str | None) -> str:
+        if not text:
+            return ""
+        s = _strip_tags(str(text))
+        s = _html.unescape(s)
+        s = _re.sub(r"\s+", " ", s).strip()
+        return s
 
     try:
         from openpyxl import Workbook
@@ -4580,7 +5102,7 @@ def export_concurso_excel_view(request, congreso_id: int, concurso_id: int):
             _normalize(concurso.title),
             _normalize(concurso.type),
             _normalize(concurso.lugar or ""),
-            _normalize(concurso.description or ""),
+            _normalize(_plain(concurso.description) or ""),
             inst.id if inst else "",
             _normalize((inst.first_name or inst.username) if inst else ""),
             _normalize((inst.email or inst.username) if inst else ""),
@@ -4588,14 +5110,36 @@ def export_concurso_excel_view(request, congreso_id: int, concurso_id: int):
             concurso.numero_equipos if is_grupal and concurso.numero_equipos is not None else "",
             concurso.max_por_equipo if is_grupal and concurso.max_por_equipo is not None else "",
         ])
-        for col in ws.columns:
-            max_len = 0
+        from openpyxl.styles import Alignment, Font, Border, Side
+        from openpyxl.comments import Comment
+        for i, col in enumerate(ws.iter_cols(min_row=1, max_row=ws.max_row), start=1):
             col_letter = col[0].column_letter
-            for cell in col:
-                val = str(cell.value) if cell.value is not None else ""
-                if len(val) > max_len:
-                    max_len = len(val)
-            ws.column_dimensions[col_letter].width = min(max_len + 2, 50)
+            if i == 6:
+                ws.column_dimensions[col_letter].width = 30
+                for cell in col:
+                    cell.alignment = Alignment(wrap_text=True, vertical="top")
+            else:
+                max_len = 0
+                for cell in col:
+                    val = str(cell.value) if cell.value is not None else ""
+                    if len(val) > max_len:
+                        max_len = len(val)
+                ws.column_dimensions[col_letter].width = min(max_len + 2, 50)
+        thin = Side(style="thin", color="000000")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+            cell.border = border
+        for r in range(2, ws.max_row + 1):
+            ws.row_dimensions[r].height = 45
+            for c in range(1, ws.max_column + 1):
+                ws.cell(row=r, column=c).border = border
+            dc = ws.cell(row=r, column=6)
+            if dc.value:
+                try:
+                    dc.comment = Comment(text=str(dc.value), author="")
+                except Exception:
+                    pass
         response = HttpResponse(
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
@@ -4629,7 +5173,7 @@ def export_concurso_excel_view(request, congreso_id: int, concurso_id: int):
             _normalize(concurso.title),
             _normalize(concurso.type),
             _normalize(concurso.lugar or ""),
-            _normalize((concurso.description or "").replace("\n"," ").strip()),
+            _normalize(_plain(concurso.description)),
             inst.id if inst else "",
             _normalize((inst.first_name or inst.username) if inst else ""),
             _normalize((inst.email or inst.username) if inst else ""),
@@ -5850,12 +6394,31 @@ def taller_participantes_view(request, congreso_id: int, taller_id: int):
     for v in extra_vals:
         d = extra_values_by_user.setdefault(v.user_id, {})
         d[v.field_id] = v.value
+
+    # Mapping de membresía por usuario (para botón editar participante)
+    from .models import UserCongresoMembership
+    memberships_qs = UserCongresoMembership.objects.filter(
+        congreso=congreso,
+        role="participante",
+        user_id__in=user_ids,
+    ).values_list("user_id", "id")
+    membership_by_user: dict[int, int] = {u: mid for u, mid in memberships_qs}
+
+    # Permisos administración (igual lógica que otras vistas)
+    is_admin = (
+        (congreso.admin_user_id == request.user.id)
+        or request.user.groups.filter(name__in=["Administradores_Congresos", "Administrador"]).exists()
+        or request.user.is_superuser
+    )
+
     ctx = {
         "congreso": congreso,
         "taller": taller,
         "inscripciones": inscripciones,
         "extra_fields": extra_fields,
         "extra_values_by_user": extra_values_by_user,
+        "membership_by_user": membership_by_user,
+        "is_admin": is_admin,
     }
     grupos = request.user.groups.values_list("name", flat=True)
     if "Instructores" in grupos:
@@ -5885,11 +6448,104 @@ def concurso_participantes_view(request, congreso_id: int, concurso_id: int):
         messages.error(request, "El concurso solicitado no existe en este congreso.")
         return redirect("concursos_list", congreso.id)
 
-    if request.method == "POST" and request.POST.get("action") == "remove" and request.POST.get("insc_id"):
-        insc_id = request.POST.get("insc_id")
-        ConcursoInscripcion.objects.filter(id=insc_id, concurso=concurso).delete()
-        messages.success(request, "Participante removido del concurso.", extra_tags="concurso")
-        return redirect("concurso_participantes", congreso.id, concurso.id)
+    # Acciones POST: quitar participante, eliminar equipo completo o editar equipo
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "remove" and request.POST.get("insc_id"):
+            insc_id = request.POST.get("insc_id")
+            try:
+                ins = ConcursoInscripcion.objects.get(id=insc_id, concurso=concurso)
+                user_id = ins.user_id
+                ins.delete()
+                # Remover memb. del equipo (si aplica) y borrar equipo vacío
+                try:
+                    memb = ConcursoEquipoMiembro.objects.filter(equipo__concurso=concurso, user_id=user_id).select_related("equipo").first()
+                    if memb:
+                        equipo = memb.equipo
+                        memb.delete()
+                        if equipo.miembros.count() == 0:
+                            equipo.delete()
+                except Exception:
+                    pass
+                messages.success(request, "Participante removido del concurso.", extra_tags="concurso")
+            except ConcursoInscripcion.DoesNotExist:
+                messages.error(request, "La inscripción no existe.")
+            return redirect("concurso_participantes", congreso.id, concurso.id)
+        elif action == "remove_team" and request.POST.get("team_id"):
+            team_id = request.POST.get("team_id")
+            try:
+                equipo = ConcursoEquipo.objects.get(pk=team_id, concurso=concurso)
+                member_user_ids = list(equipo.miembros.values_list("user_id", flat=True))
+                ConcursoInscripcion.objects.filter(concurso=concurso, user_id__in=member_user_ids).delete()
+                ConcursoEquipoMiembro.objects.filter(equipo=equipo).delete()
+                equipo.delete()
+                messages.success(request, "Equipo eliminado por completo del concurso.", extra_tags="concurso")
+            except ConcursoEquipo.DoesNotExist:
+                messages.error(request, "El equipo no existe o ya fue eliminado.")
+            return redirect("concurso_participantes", congreso.id, concurso.id)
+        elif action == "edit_team" and request.POST.get("team_id"):
+            team_id = request.POST.get("team_id")
+            team_name = (request.POST.get("team_name") or "").strip()
+            try:
+                equipo = ConcursoEquipo.objects.get(pk=team_id, concurso=concurso)
+            except ConcursoEquipo.DoesNotExist:
+                messages.error(request, "El equipo no existe.")
+                return redirect("concurso_participantes", congreso.id, concurso.id)
+            max_eq = concurso.max_por_equipo or 0
+            desired_ids: list[str] = []
+            new_leader = (request.POST.get("team_member_1") or str(equipo.lider_id)).strip()
+            if not new_leader:
+                messages.error(request, "Debes seleccionar un líder para el equipo.")
+                return redirect("concurso_participantes", congreso.id, concurso.id)
+            desired_ids.append(new_leader)
+            for slot in range(2, max_eq + 1):
+                v = (request.POST.get(f"team_member_{slot}") or "").strip()
+                if v:
+                    desired_ids.append(v)
+            if len(set(desired_ids)) != len(desired_ids):
+                messages.error(request, "Los integrantes seleccionados deben ser únicos.")
+                return redirect("concurso_participantes", congreso.id, concurso.id)
+            if max_eq and len(desired_ids) > max_eq:
+                messages.error(request, "Se supera el máximo de integrantes por equipo.")
+                return redirect("concurso_participantes", congreso.id, concurso.id)
+            conflict_other = ConcursoInscripcion.objects.filter(congreso=congreso, user_id__in=desired_ids).exclude(concurso=concurso)
+            if conflict_other.exists():
+                messages.error(request, "Alguno de los integrantes ya está inscrito en otro concurso.")
+                return redirect("concurso_participantes", congreso.id, concurso.id)
+            conflict_team = ConcursoEquipoMiembro.objects.filter(equipo__concurso=concurso, user_id__in=desired_ids).exclude(equipo=equipo)
+            if conflict_team.exists():
+                messages.error(request, "Alguno de los integrantes ya está en otro equipo de este concurso.")
+                return redirect("concurso_participantes", congreso.id, concurso.id)
+            if team_name and team_name != equipo.nombre:
+                equipo.nombre = team_name
+                try:
+                    equipo.save()
+                except Exception:
+                    messages.error(request, "No se pudo actualizar el nombre del equipo (¿duplicado?).")
+                    return redirect("concurso_participantes", congreso.id, concurso.id)
+            # Actualizar líder si cambió
+            new_leader_id_int = int(new_leader)
+            if equipo.lider_id != new_leader_id_int:
+                equipo.lider_id = new_leader_id_int
+                try:
+                    equipo.save(update_fields=["lider_id"])
+                except Exception:
+                    messages.error(request, "No se pudo actualizar el líder del equipo.")
+                    return redirect("concurso_participantes", congreso.id, concurso.id)
+            current_ids = set(equipo.miembros.values_list("user_id", flat=True))
+            desired_set = set(map(int, desired_ids))
+            to_add = list(desired_set - current_ids)
+            to_remove = list(current_ids - desired_set)
+            for uid in to_add:
+                ConcursoEquipoMiembro.objects.create(equipo=equipo, user_id=uid)
+                if not ConcursoInscripcion.objects.filter(concurso=concurso, concurso_id=concurso.id, user_id=uid).exists():
+                    mem = UserCongresoMembership.objects.filter(congreso=congreso, user_id=uid, role="participante").select_related("performance_level").first()
+                    ConcursoInscripcion.objects.create(congreso=congreso, concurso=concurso, user_id=uid, performance_level=mem.performance_level if mem else None)
+            if to_remove:
+                ConcursoEquipoMiembro.objects.filter(equipo=equipo, user_id__in=to_remove).delete()
+                ConcursoInscripcion.objects.filter(concurso=concurso, user_id__in=to_remove).delete()
+            messages.success(request, "Equipo actualizado correctamente.", extra_tags="concurso")
+            return redirect("concurso_participantes", congreso.id, concurso.id)
 
     inscripciones = (
         ConcursoInscripcion.objects
@@ -5912,13 +6568,109 @@ def concurso_participantes_view(request, congreso_id: int, concurso_id: int):
     for v in extra_vals:
         d = extra_values_by_user.setdefault(v.user_id, {})
         d[v.field_id] = v.value
+
+    from .models import UserCongresoMembership
+    memberships_qs = UserCongresoMembership.objects.filter(
+        congreso=congreso,
+        role="participante",
+        user_id__in=user_ids,
+    ).values_list("user_id", "id")
+    membership_by_user: dict[int, int] = {u: mid for u, mid in memberships_qs}
+    # Mapear equipo por usuario para concursos grupales
+    team_by_user: dict[int, str] = {}
+    team_id_by_user: dict[int, int] = {}
+    if concurso.type == "grupal" and user_ids:
+        membs = (
+            ConcursoEquipoMiembro.objects
+            .filter(equipo__concurso=concurso, user_id__in=user_ids)
+            .select_related("equipo")
+        )
+        for m in membs:
+            team_by_user[m.user_id] = m.equipo.nombre
+            team_id_by_user[m.user_id] = m.equipo_id
+    is_admin = (
+        (congreso.admin_user_id == request.user.id)
+        or request.user.groups.filter(name__in=["Administradores_Congresos", "Administrador"]).exists()
+        or request.user.is_superuser
+    )
     ctx = {
         "congreso": congreso,
         "concurso": concurso,
         "inscripciones": inscripciones,
         "extra_fields": extra_fields,
         "extra_values_by_user": extra_values_by_user,
+        "membership_by_user": membership_by_user,
+        "team_by_user": team_by_user,
+        "team_id_by_user": team_id_by_user,
+        "is_admin": is_admin,
     }
+    # Agrupar por equipo (admin) cuando sea grupal
+    if concurso.type == "grupal":
+        ins_by_user = {i.user_id: i for i in inscripciones}
+        equipos = (
+            ConcursoEquipo.objects.filter(concurso=concurso)
+            .prefetch_related("miembros__user")
+            .order_by("nombre")
+        )
+        teams_rows = []
+        seen_users = set()
+        for eq in equipos:
+            rows = []
+            miembros = list(eq.miembros.select_related("user"))
+            miembros.sort(key=lambda m: (m.user.first_name or m.user.username, m.user.last_name or ""))
+            for m in miembros:
+                ins = ins_by_user.get(m.user_id)
+                if not ins:
+                    continue
+                seen_users.add(m.user_id)
+                ordered = [extra_values_by_user.get(ins.user_id, {}).get(f.id, "") for f in extra_fields]
+                rows.append({"ins": ins, "values_ordered": ordered})
+            teams_rows.append({"equipo": eq, "rows": rows})
+        orphan_rows = []
+        for ins in inscripciones:
+            if ins.user_id not in seen_users:
+                ordered = [extra_values_by_user.get(ins.user_id, {}).get(f.id, "") for f in extra_fields]
+                orphan_rows.append({"ins": ins, "values_ordered": ordered})
+        # Participantes elegibles para agregar a cualquier equipo (excluye ocupados en otros concursos o en otros equipos de este)
+        base_qs = UserCongresoMembership.objects.filter(congreso=congreso, role="participante", status="approved").select_related("user")
+        ocupados_ids = set(ConcursoInscripcion.objects.filter(congreso=congreso).exclude(concurso=concurso).values_list("user_id", flat=True))
+        ocupados_ids |= set(ConcursoEquipoMiembro.objects.filter(equipo__concurso=concurso).values_list("user_id", flat=True))
+        options = base_qs.exclude(user_id__in=list(ocupados_ids)).order_by("user__first_name", "user__last_name", "user__username")
+        equipo_participantes_options = [
+            {"id": m.user_id, "display": f"{(m.user.get_full_name() or m.user.username)} ({m.user.email or 'sin-correo'})"}
+            for m in options
+        ]
+        # Mapa de miembros por equipo (para preselección en el modal)
+        team_members_map = {}
+        team_prefill_map = {}
+        for t in teams_rows:
+            members = []
+            for row in t["rows"]:
+                u = row["ins"].user
+                members.append({"id": u.id, "display": f"{(u.get_full_name() or u.username)} ({u.email or 'sin-correo'})"})
+            team_members_map[t["equipo"].id] = members
+            # Prefill por slot (2..max) excluyendo líder
+            eq = t["equipo"]
+            miembros = list(eq.miembros.select_related("user").all())
+            miembros.sort(key=lambda m: (m.user.first_name or m.user.username, m.user.last_name or ""))
+            prefill = {}
+            non_leaders = [m for m in miembros if m.user_id != eq.lider_id]
+            max_eq = concurso.max_por_equipo or 0
+            for idx, m in enumerate(non_leaders, start=2):
+                if idx > max_eq:
+                    break
+                nombre = m.user.get_full_name() or m.user.username
+                prefill[idx] = {"id": m.user_id, "display": f"{nombre} ({m.user.email or 'sin-correo'})"}
+            team_prefill_map[t["equipo"].id] = prefill
+        ctx.update({
+            "teams_rows": teams_rows,
+            "orphan_rows": orphan_rows,
+            "equipo_participantes_options": equipo_participantes_options,
+            "team_members_map": team_members_map,
+            "team_prefill_map": team_prefill_map,
+            "team_slots": list(range(2, (concurso.max_por_equipo or 0) + 1)),
+            "max_integrantes_equipo": concurso.max_por_equipo or 0,
+        })
     grupos = request.user.groups.values_list("name", flat=True)
     if "Instructores" in grupos:
         rol = "Instructor"
@@ -5974,12 +6726,27 @@ def conferencia_participantes_view(request, congreso_id: int, conferencia_id: in
     for v in extra_vals:
         d = extra_values_by_user.setdefault(v.user_id, {})
         d[v.field_id] = v.value
+
+    from .models import UserCongresoMembership
+    memberships_qs = UserCongresoMembership.objects.filter(
+        congreso=congreso,
+        role="participante",
+        user_id__in=user_ids,
+    ).values_list("user_id", "id")
+    membership_by_user: dict[int, int] = {u: mid for u, mid in memberships_qs}
+    is_admin = (
+        (congreso.admin_user_id == request.user.id)
+        or request.user.groups.filter(name__in=["Administradores_Congresos", "Administrador"]).exists()
+        or request.user.is_superuser
+    )
     ctx = {
         "congreso": congreso,
         "conferencia": conferencia,
         "inscripciones": inscripciones,
         "extra_fields": extra_fields,
         "extra_values_by_user": extra_values_by_user,
+        "membership_by_user": membership_by_user,
+        "is_admin": is_admin,
     }
     grupos = request.user.groups.values_list("name", flat=True)
     if "Instructores" in grupos:

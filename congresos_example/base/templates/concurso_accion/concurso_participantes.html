@@ -10,6 +10,11 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
   {% include '_congreso_base_styles.html' %}
+  <style>
+    .action-btn{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:6px 10px;color:#334155;margin-right:6px;transition:.12s background, .12s box-shadow, .12s color;}
+    .action-btn:hover{background:#f7fafc;box-shadow:0 2px 6px rgba(16,24,40,.08);color:#0f172a;}
+    .action-btn:disabled{opacity:.55;pointer-events:none;}
+  </style>
 </head>
 <body>
   {% include 'partials/congreso_sidebar.html' %}
@@ -48,48 +53,222 @@
     <div class="container-fluid" style="padding-left:0; padding-right:0;">
       <div class="panel"><div class="panel-header"><span class="panel-title-blue">Participantes</span></div>
         <div class="panel-body">
-          {% if inscripciones %}
-            <div class="table-responsive">
-              <table class="table table-striped align-middle">
-                <thead>
-                  <tr>
-                    <th>Nombre</th>
-                    <th>Correo</th>
-                    <th>Nivel de desempeño</th>
-                    {% for ef in extra_fields %}
-                      <th>{{ ef.name }}</th>
-                    {% endfor %}
-                    <th class="text-end">Quitar</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for ins in inscripciones %}
-                    <tr>
-                      <td>{{ ins.user.first_name|default:ins.user.username }}</td>
-                      <td>{{ ins.user.email|default:"—" }}</td>
-                      <td>{{ ins.performance_level.name|default:"—" }}</td>
-                      {% for ef in extra_fields %}
-                        {% with peruser=extra_values_by_user|get_item:ins.user.id %}
-                          <td>{{ peruser|get_item:ef.id|default:"—" }}</td>
-                        {% endwith %}
-                      {% endfor %}
-                      <td class="text-end">
-                        <form method="post" style="display:inline;">
+          {% if concurso.type == 'grupal' %}
+            {% if teams_rows %}
+              {% for t in teams_rows %}
+                <div class="mb-3 p-3" style="border:1px solid #e2e8f0;border-radius:10px;">
+                  <div class="d-flex align-items-center justify-content-between mb-2">
+                    <h5 class="m-0">Equipo: {{ t.equipo.nombre }}</h5>
+                    <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editTeamModal_{{ t.equipo.id }}"><i class="bi bi-pencil-square"></i></button>
+                    <form method="post" onsubmit="return confirm('¿Eliminar el equipo completo? Se quitarán todas sus inscripciones.');">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="remove_team" />
+                      <input type="hidden" name="team_id" value="{{ t.equipo.id }}" />
+                      <button class="btn btn-outline-danger btn-sm"><i class="bi bi-people-fill"></i> <i class="bi bi-trash"></i></button>
+                    </form>
+                    </div>
+                  </div>
+                  {# Modal editar equipo #}
+                  <div class="modal fade" id="editTeamModal_{{ t.equipo.id }}" tabindex="-1" aria-hidden="true">
+                    <div class="modal-dialog">
+                      <div class="modal-content">
+                        <div class="modal-header"><h5 class="modal-title">Editar equipo</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+                        <form method="post">
                           {% csrf_token %}
-                          <input type="hidden" name="action" value="remove" />
-                          <input type="hidden" name="insc_id" value="{{ ins.id }}" />
-                          <button class="btn btn-sm btn-danger" title="Quitar" aria-label="Quitar">
-                            <i class="bi bi-trash"></i>
-                          </button>
+                          <input type="hidden" name="action" value="edit_team" />
+                          <input type="hidden" name="team_id" value="{{ t.equipo.id }}" />
+                          <div class="modal-body">
+                            <div class="mb-3">
+                              <label class="form-label">Nombre del equipo</label>
+                              <input type="text" class="form-control" name="team_name" value="{{ t.equipo.nombre }}" required />
+                            </div>
+                            <div class="mb-2">
+                              <label class="form-label">Integrante #1 (Líder)</label>
+                              <select name="team_member_1" class="form-select" required>
+                                {# Opción preseleccionada: líder actual #}
+                                <option value="{{ t.equipo.lider_id }}" selected>
+                                  {{ t.equipo.lider.get_full_name|default:t.equipo.lider.username }} ({{ t.equipo.lider.email|default:'—' }})
+                                </option>
+                                {# Permitir elegir a otro integrante actual del equipo como líder #}
+                                {% for m in team_members_map|get_item:t.equipo.id %}
+                                  {% if m.id != t.equipo.lider_id %}
+                                    <option value="{{ m.id }}">{{ m.display }}</option>
+                                  {% endif %}
+                                {% endfor %}
+                                {# Y permitir elegir a alguien elegible externo #}
+                                {% for opt in equipo_participantes_options %}
+                                  <option value="{{ opt.id }}">{{ opt.display }}</option>
+                                {% endfor %}
+                              </select>
+                            </div>
+                            {% if team_slots %}
+                              {% for slot in team_slots %}
+                                <div class="mb-2">
+                                  <label class="form-label">Integrante #{{ slot }}</label>
+                                  <select name="team_member_{{ slot }}" class="form-select">
+                                    {% with pre=team_prefill_map|get_item:t.equipo.id %}
+                                      {% if pre|get_item:slot %}
+                                        {% with sel=pre|get_item:slot %}
+                                          <option value="{{ sel.id }}" selected>{{ sel.display }}</option>
+                                        {% endwith %}
+                                      {% endif %}
+                                    {% endwith %}
+                                    <option value="">Sin integrante</option>
+                                    {% for opt in equipo_participantes_options %}
+                                      <option value="{{ opt.id }}">{{ opt.display }}</option>
+                                    {% endfor %}
+                                  </select>
+                                </div>
+                              {% endfor %}
+                            {% endif %}
+                            <div class="form-text">Máximo integrantes por equipo: {{ max_integrantes_equipo }} (incluye líder).</div>
+                          </div>
+                          <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button type="submit" class="btn btn-primary">Guardar cambios</button></div>
                         </form>
-                      </td>
-                    </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="table-responsive">
+                    <table class="table table-striped align-middle">
+                      <thead>
+                        <tr>
+                          <th>Nombre</th>
+                          <th>Correo</th>
+                          <th>Nivel de desempeño</th>
+                          {% for ef in extra_fields %}<th>{{ ef.name }}</th>{% endfor %}
+                          <th class="text-end">Acción</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for row in t.rows %}
+                          {% with ins=row.ins %}
+                          <tr>
+                            <td>{{ ins.user.first_name|default:ins.user.username }}</td>
+                            <td>{{ ins.user.email|default:'—' }}</td>
+                            <td>{{ ins.performance_level.name|default:'—' }}</td>
+                            {% for val in row.values_ordered %}<td>{{ val|default:'—' }}</td>{% endfor %}
+                            <td class="text-end">
+                              <form method="post" style="display:inline-flex;gap:6px;">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="remove" />
+                                <input type="hidden" name="insc_id" value="{{ ins.id }}" />
+                                {% with mem_id=membership_by_user|get_item:ins.user.id %}
+                                  {% if mem_id %}
+                                    <a href="{% url 'usuario_editar_participante' congreso.id mem_id %}" class="action-btn" title="Editar" aria-label="Editar" {% if not is_admin %}style="pointer-events:none;opacity:.55;"{% endif %}>
+                                      <i class="bi bi-pencil"></i>
+                                    </a>
+                                  {% endif %}
+                                {% endwith %}
+                                <button type="button" class="action-btn" title="Eliminar" aria-label="Eliminar" onclick="if(confirm('¿Quitar participante de este concurso?')){ this.form.submit(); }" {% if not is_admin %}disabled{% endif %}>
+                                  <i class="bi bi-trash"></i>
+                                </button>
+                              </form>
+                            </td>
+                          </tr>
+                          {% endwith %}
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              {% endfor %}
+              {% if orphan_rows %}
+                <div class="mb-3 p-3" style="border:1px dashed #e2e8f0;border-radius:10px;">
+                  <div class="d-flex align-items-center justify-content-between mb-2">
+                    <h5 class="m-0">Sin equipo</h5>
+                  </div>
+                  <div class="table-responsive">
+                    <table class="table table-striped align-middle">
+                      <thead>
+                        <tr>
+                          <th>Nombre</th>
+                          <th>Correo</th>
+                          <th>Nivel de desempeño</th>
+                          {% for ef in extra_fields %}<th>{{ ef.name }}</th>{% endfor %}
+                          <th class="text-end">Acción</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for row in orphan_rows %}
+                          {% with ins=row.ins %}
+                          <tr>
+                            <td>{{ ins.user.first_name|default:ins.user.username }}</td>
+                            <td>{{ ins.user.email|default:'—' }}</td>
+                            <td>{{ ins.performance_level.name|default:'—' }}</td>
+                            {% for val in row.values_ordered %}<td>{{ val|default:'—' }}</td>{% endfor %}
+                            <td class="text-end">
+                              <form method="post" style="display:inline-flex;gap:6px;">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="remove" />
+                                <input type="hidden" name="insc_id" value="{{ ins.id }}" />
+                                <button type="button" class="action-btn" title="Eliminar" aria-label="Eliminar" onclick="if(confirm('¿Quitar participante de este concurso?')){ this.form.submit(); }" {% if not is_admin %}disabled{% endif %}>
+                                  <i class="bi bi-trash"></i>
+                                </button>
+                              </form>
+                            </td>
+                          </tr>
+                          {% endwith %}
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              {% endif %}
+            {% else %}
+              <div class="empty">Aún no hay equipos registrados para este concurso en "{{ congreso.name }}".</div>
+            {% endif %}
           {% else %}
-            <div class="empty">Aún no hay participantes registrados para este concurso en "{{ congreso.name }}".</div>
+            {% if inscripciones %}
+              <div class="table-responsive">
+                <table class="table table-striped align-middle">
+                  <thead>
+                    <tr>
+                      <th>Nombre</th>
+                      <th>Correo</th>
+                      <th>Nivel de desempeño</th>
+                      {% for ef in extra_fields %}
+                        <th>{{ ef.name }}</th>
+                      {% endfor %}
+                      <th class="text-end">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for ins in inscripciones %}
+                      <tr>
+                        <td>{{ ins.user.first_name|default:ins.user.username }}</td>
+                        <td>{{ ins.user.email|default:"—" }}</td>
+                        <td>{{ ins.performance_level.name|default:"—" }}</td>
+                        {% for ef in extra_fields %}
+                          {% with peruser=extra_values_by_user|get_item:ins.user.id %}
+                            <td>{{ peruser|get_item:ef.id|default:"—" }}</td>
+                          {% endwith %}
+                        {% endfor %}
+                        <td class="text-end">
+                          <form method="post" style="display:inline-flex;align-items:center;gap:6px;">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="remove" />
+                            <input type="hidden" name="insc_id" value="{{ ins.id }}" />
+                            {% with mem_id=membership_by_user|get_item:ins.user.id %}
+                              {% if mem_id %}
+                                <a href="{% url 'usuario_editar_participante' congreso.id mem_id %}" class="action-btn" title="Editar" aria-label="Editar" {% if not is_admin %}style="pointer-events:none;opacity:.55;"{% endif %}>
+                                  <i class="bi bi-pencil"></i>
+                                </a>
+                              {% endif %}
+                            {% endwith %}
+                            <button type="button" class="action-btn" title="Eliminar" aria-label="Eliminar" onclick="if(confirm('¿Quitar participante de este concurso?')){ this.form.submit(); }" {% if not is_admin %}disabled{% endif %}>
+                              <i class="bi bi-trash"></i>
+                            </button>
+                          </form>
+                        </td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <div class="empty">Aún no hay participantes registrados para este concurso en "{{ congreso.name }}".</div>
+            {% endif %}
           {% endif %}
         </div>
       </div>
@@ -98,3 +277,58 @@
   </div>
 </body>
 </html>
+<script>
+  // Fallback para abrir/cerrar modales cuando Bootstrap JS no está cargado
+  (function(){
+    function hasBootstrap(){ return typeof bootstrap !== 'undefined' && bootstrap.Modal; }
+    if (hasBootstrap()) return;
+    var triggers = document.querySelectorAll('[data-bs-toggle="modal"][data-bs-target]');
+    if(!triggers.length) return;
+    function openModal(modal){
+      if(!modal) return;
+      var id = modal.getAttribute('id') || ('modal-' + Date.now());
+      modal.setAttribute('id', id);
+      var backdropId = id + '-backdrop';
+      var backdrop = document.getElementById(backdropId);
+      if(!backdrop){
+        backdrop = document.createElement('div');
+        backdrop.id = backdropId;
+        backdrop.className = 'modal-backdrop fade show';
+        document.body.appendChild(backdrop);
+      }
+      modal.style.display = 'block';
+      modal.classList.add('show');
+      modal.removeAttribute('aria-hidden');
+      document.body.classList.add('modal-open');
+      // Cierre por botones
+      modal.addEventListener('click', function onClick(e){
+        if(e.target.classList.contains('btn-close') || e.target.closest('[data-bs-dismiss="modal"]')){
+          closeModal(modal);
+          modal.removeEventListener('click', onClick);
+        }
+      });
+      // Cerrar con ESC
+      function onEsc(ev){ if(ev.key === 'Escape'){ closeModal(modal); document.removeEventListener('keydown', onEsc);} }
+      document.addEventListener('keydown', onEsc);
+    }
+    function closeModal(modal){
+      var id = modal.getAttribute('id');
+      var backdrop = document.getElementById(id + '-backdrop');
+      modal.classList.remove('show');
+      modal.style.display = 'none';
+      modal.setAttribute('aria-hidden','true');
+      document.body.classList.remove('modal-open');
+      if(backdrop) backdrop.remove();
+    }
+    triggers.forEach(function(btn){
+      btn.addEventListener('click', function(ev){
+        ev.preventDefault();
+        var targetSel = btn.getAttribute('data-bs-target');
+        try{
+          var modal = document.querySelector(targetSel);
+          openModal(modal);
+        }catch(e){ console.warn('modal fallback error', e); }
+      });
+    });
+  })();
+</script>

@@ -10,6 +10,11 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
   {% include '_congreso_base_styles.html' %}
+  <style>
+    .action-btn{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:6px 10px;color:#334155;margin-right:6px;transition:.12s background, .12s box-shadow, .12s color;}
+    .action-btn:hover{background:#f7fafc;box-shadow:0 2px 6px rgba(16,24,40,.08);color:#0f172a;}
+    .action-btn:disabled{opacity:.55;pointer-events:none;}
+  </style>
 </head>
 <body>
   {% include 'partials/congreso_sidebar.html' %}
@@ -48,7 +53,7 @@
                     {% for ef in extra_fields %}
                       <th>{{ ef.name }}</th>
                     {% endfor %}
-                    <th class="text-end">Quitar</th>
+                    <th class="text-end">Acción</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -63,11 +68,18 @@
                         {% endwith %}
                       {% endfor %}
                       <td class="text-end">
-                        <form method="post" style="display:inline;">
+                        <form method="post" style="display:inline-flex;align-items:center;gap:6px;">
                           {% csrf_token %}
                           <input type="hidden" name="action" value="remove" />
                           <input type="hidden" name="insc_id" value="{{ ins.id }}" />
-                          <button class="btn btn-sm btn-danger" title="Quitar" aria-label="Quitar">
+                          {% with mem_id=membership_by_user|get_item:ins.user.id %}
+                            {% if mem_id %}
+                              <a href="{% url 'usuario_editar_participante' congreso.id mem_id %}" class="action-btn" title="Editar" aria-label="Editar" {% if not is_admin %}style="pointer-events:none;opacity:.55;"{% endif %}>
+                                <i class="bi bi-pencil"></i>
+                              </a>
+                            {% endif %}
+                          {% endwith %}
+                          <button type="button" class="action-btn" title="Eliminar" aria-label="Eliminar" onclick="if(confirm('¿Quitar participante de esta conferencia?')){ this.form.submit(); }" {% if not is_admin %}disabled{% endif %}>
                             <i class="bi bi-trash"></i>
                           </button>
                         </form>

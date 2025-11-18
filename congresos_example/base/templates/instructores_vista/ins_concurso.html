@@ -108,7 +108,7 @@
                 {% elif concurso.type == 'grupal' %}
                 <div class="meta-item">
                   <span class="meta-label">Equipos máximos</span>
-                  <span class="meta-value">{% if concurso.numero_equipos and concurso.max_por_equipo %}{{ concurso.numero_equipos }} de {{ concurso.max_por_equipo }}{% elif concurso.numero_equipos %}{{ concurso.numero_equipos }}{% elif concurso.max_por_equipo %}{{ concurso.max_por_equipo }}{% else %}—{% endif %}</span>
+                  <span class="meta-value">{% if concurso.numero_equipos and concurso.max_por_equipo %}{{ concurso.max_por_equipo }} de {{ concurso.numero_equipos }}{% elif concurso.numero_equipos %}{{ concurso.numero_equipos }}{% elif concurso.max_por_equipo %}{{ concurso.max_por_equipo }}{% else %}—{% endif %}</span>
                 </div>
                 {% endif %}
               </div>
@@ -127,46 +127,111 @@
                 </div>
                 <div id="concurso-alumnos" class="description-body" style="display:none;">
                   <div class="participants-strip{% if not concurso.inscripciones.count %} empty{% endif %}">
-                    <div class="ps-title"><span class="ps-dash">–</span> Alumnos inscritos a este concurso</div>
-                    <div class="ps-count">{{ concurso.inscripciones.count }}{% if concurso.cupo_maximo %} / {{ concurso.cupo_maximo }}{% endif %}</div>
-                  </div>
-                  {% if participantes_rows %}
-                    <div class="table-responsive">
-                      <table class="table table-striped align-middle">
-                        <thead>
-                          <tr>
-                            <th>Nombre</th>
-                            <th>Correo</th>
-                            <th>Nivel de desempeño</th>
-                            {% if concurso.type == 'grupal' %}
-                              <th>Equipo</th>
-                            {% endif %}
-                            {% for f in extra_fields %}
-                              <th>{{ f.name }}</th>
-                            {% endfor %}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {% for row in participantes_rows %}
-                            {% with ins=row.ins %}
-                            <tr>
-                              <td>{{ ins.user.get_full_name|default:ins.user.username }}</td>
-                              <td>{{ ins.user.email|default:ins.user.username }}</td>
-                              <td>{{ ins.performance_level.name|default:'—' }}</td>
-                              {% if concurso.type == 'grupal' %}
-                                <td>{{ ins.team_name|default:'—' }}</td>
-                              {% endif %}
-                              {% for val in row.values_ordered %}
-                                <td>{{ val|default:'' }}</td>
-                              {% endfor %}
-                            </tr>
-                            {% endwith %}
-                          {% endfor %}
-                        </tbody>
-                      </table>
+                    <div class="ps-title">
+                      <span class="ps-dash">–</span>
+                      {% if concurso.type == 'grupal' %} Equipos registrados {% else %} Alumnos inscritos a este concurso {% endif %}
                     </div>
+                    <div class="ps-count">
+                      {% if concurso.type == 'grupal' %}
+                        {{ equipos_inscritos|default:0 }}{% if concurso.numero_equipos %} / {{ concurso.numero_equipos }}{% endif %}
+                      {% else %}
+                        {{ concurso.inscripciones.count }}{% if concurso.cupo_maximo %} / {{ concurso.cupo_maximo }}{% endif %}
+                      {% endif %}
+                    </div>
+                  </div>
+                  {% if concurso.type == 'grupal' %}
+                    {% if teams_rows %}
+                      {% for t in teams_rows %}
+                        <div class="mt-3 p-3" style="border:1px solid #e2e8f0;border-radius:10px;">
+                          <h6 class="m-0 mb-2">Equipo: {{ t.equipo.nombre }}</h6>
+                          <div class="table-responsive">
+                            <table class="table table-striped align-middle">
+                              <thead>
+                                <tr>
+                                  <th>Nombre</th>
+                                  <th>Correo</th>
+                                  <th>Nivel de desempeño</th>
+                                  {% for f in extra_fields %}<th>{{ f.name }}</th>{% endfor %}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {% for row in t.rows %}
+                                  {% with ins=row.ins %}
+                                  <tr>
+                                    <td>{{ ins.user.get_full_name|default:ins.user.username }}</td>
+                                    <td>{{ ins.user.email|default:ins.user.username }}</td>
+                                    <td>{{ ins.performance_level.name|default:'—' }}</td>
+                                    {% for val in row.values_ordered %}<td>{{ val|default:'' }}</td>{% endfor %}
+                                  </tr>
+                                  {% endwith %}
+                                {% endfor %}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      {% endfor %}
+                    {% endif %}
+                    {% if orphan_rows %}
+                      <div class="mt-3 p-3" style="border:1px dashed #e2e8f0;border-radius:10px;">
+                        <h6 class="m-0 mb-2">Sin equipo</h6>
+                        <div class="table-responsive">
+                          <table class="table table-striped align-middle">
+                            <thead>
+                              <tr>
+                                <th>Nombre</th>
+                                <th>Correo</th>
+                                <th>Nivel de desempeño</th>
+                                {% for f in extra_fields %}<th>{{ f.name }}</th>{% endfor %}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {% for row in orphan_rows %}
+                                {% with ins=row.ins %}
+                                <tr>
+                                  <td>{{ ins.user.get_full_name|default:ins.user.username }}</td>
+                                  <td>{{ ins.user.email|default:ins.user.username }}</td>
+                                  <td>{{ ins.performance_level.name|default:'—' }}</td>
+                                  {% for val in row.values_ordered %}<td>{{ val|default:'' }}</td>{% endfor %}
+                                </tr>
+                                {% endwith %}
+                              {% endfor %}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    {% endif %}
+                    {% if not teams_rows and not orphan_rows %}
+                      <div class="empty">Aún no hay equipos registrados para este concurso.</div>
+                    {% endif %}
                   {% else %}
-                    <div class="empty">Aún no hay participantes registrados para este concurso.</div>
+                    {% if participantes_rows %}
+                      <div class="table-responsive">
+                        <table class="table table-striped align-middle">
+                          <thead>
+                            <tr>
+                              <th>Nombre</th>
+                              <th>Correo</th>
+                              <th>Nivel de desempeño</th>
+                              {% for f in extra_fields %}<th>{{ f.name }}</th>{% endfor %}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {% for row in participantes_rows %}
+                              {% with ins=row.ins %}
+                              <tr>
+                                <td>{{ ins.user.get_full_name|default:ins.user.username }}</td>
+                                <td>{{ ins.user.email|default:ins.user.username }}</td>
+                                <td>{{ ins.performance_level.name|default:'—' }}</td>
+                                {% for val in row.values_ordered %}<td>{{ val|default:'' }}</td>{% endfor %}
+                              </tr>
+                              {% endwith %}
+                            {% endfor %}
+                          </tbody>
+                        </table>
+                      </div>
+                    {% else %}
+                      <div class="empty">Aún no hay participantes registrados para este concurso.</div>
+                    {% endif %}
                   {% endif %}
                 </div>
               </div>

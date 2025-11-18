@@ -13,6 +13,12 @@
   .hero-cover h1{color:#fff;font-size:2.4rem;font-weight:800;letter-spacing:.6px;margin:36px 0;text-shadow:0 2px 8px rgba(0,0,0,.35);} 
   .page-wrap{max-width:1200px;margin:30px auto 60px;padding:0 40px;}
   .cards-wrap{ margin-top:22px; }
+  /* Layout mejorado para una sola conferencia */
+  .cards-wrap.single .row{justify-content:center;}
+  .cards-wrap.single .work-card{max-width:360px;margin-left:auto;margin-right:auto;}
+  @media (min-width:992px){
+    .cards-wrap.single .col-12{flex:0 0 380px; max-width:380px;}
+  }
     .work-card{ background:#fff; border:1px solid #e6ebf2; border-radius:12px; box-shadow:0 10px 24px rgba(15,23,42,0.06); padding:16px; height:100%; transition:transform .2s ease, box-shadow .2s ease; }
   .work-card:hover{ transform:translateY(-4px); box-shadow:0 16px 36px rgba(15,23,42,0.12); }
   .work-card:hover .work-title{ color:#f97316; }
@@ -38,7 +44,7 @@
     {% if not approved %}
       <div class="warning-box">Tu membresía aún no está aprobada o fue rechazada. Puedes explorar el catálogo, pero no podrás inscribirte.</div>
     {% endif %}
-    <div class="container-fluid px-0 cards-wrap">
+    <div class="container-fluid px-0 cards-wrap{% if conferencias|length == 1 %} single{% endif %}">
       <div class="row g-4">
         {% for f in conferencias %}
           <div class="col-12 col-md-6 col-xl-4">
