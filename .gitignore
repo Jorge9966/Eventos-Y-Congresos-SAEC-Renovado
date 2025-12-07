@@ -1,3 +1,12 @@
+# Ignore media uploads and static assets
+# Root-level media directory
+/media/
+# Root-level static directory (if present)
+/static/
+# App static directory for base app
+/congresos_example/base/static/
+# Django collectstatic output
+/staticfiles/
 # Python
 __pycache__/
 *.py[cod]
@@ -12,7 +21,13 @@ coverage.xml
 db.sqlite3
 /congresos_example/db.sqlite3
 /staticfiles/
+/congresos_example/staticfiles/
+
+/media/
+/congresos_example/media/
+
 *.log
+
 
 # Environments
 .venv/
