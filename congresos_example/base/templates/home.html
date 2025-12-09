@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <title>Sistema de Administración de Congresos</title>
+  <title>Sistema de Administración de Eventos y Congresos (SAEC)</title>
   {% load static %}
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -12,7 +12,12 @@
       background-image:url('{% static "base/img/bloggrid-heading-bg.jpg" %}');
       background-size:cover; background-position:center; background-repeat:no-repeat;}
   /* Mostrar la imagen tal cual, sin superposición */
-    .hero h1{font-weight:700; letter-spacing:.5px;}
+    .hero h1{font-weight:700; letter-spacing:.5px; margin:0; font-size:clamp(1.2rem, 1.5vw + 0.6rem, 2.2rem);} 
+    .hero .hero-title{display:flex; align-items:center; justify-content:center; gap:24px; max-width:95%; margin:0 auto; flex-wrap:nowrap;}
+    .hero .hero-logo{height:150px; width:auto; filter: drop-shadow(0 2px 6px rgba(0,0,0,.25));}
+    @media (max-width: 1200px){ .hero .hero-title{gap:20px;} }
+    @media (max-width: 992px){ .hero .hero-logo{height:120px;} .hero .hero-title{gap:18px; flex-wrap:wrap;} }
+    @media (max-width: 576px){ .hero .hero-logo{height:84px;} .hero .hero-title{gap:12px;} }
     .grid{max-width:1200px; margin:40px auto; padding:0 20px;}
     .card-evt{background:#fff; border:1px solid #e6ebf2; border-radius:14px; overflow:hidden; box-shadow:0 10px 24px rgba(15,23,42,.06); transition:transform .2s ease, box-shadow .2s ease; cursor:pointer;}
     .card-evt:hover{transform:translateY(-4px); box-shadow:0 14px 34px rgba(15,23,42,.12);}
@@ -28,7 +33,11 @@
 <body>
   <div class="page-content">
   <section class="hero">
-    <h1>SISTEMA DE ADMINISTRACIÓN DE CONGRESOS</h1>
+    <div class="hero-title">
+      <img class="hero-logo" src="{% static 'base/img/SAEC.png' %}?v=2" alt="SAEC"/>
+      <h1>SISTEMA DE ADMINISTRACIÓN DE EVENTOS Y CONGRESOS (SAEC)</h1>
+      <img class="hero-logo" src="{% static 'base/img/SAEC.png' %}?v=2" alt="SAEC"/>
+    </div>
   </section>
 
   <div class="grid">
@@ -58,6 +67,6 @@
     </div>
   </div>
   </div>
-  <footer class="footer-bar">Sistema de Administración de Eventos y Congresos</footer>
+  <footer class="footer-bar">Sistema de Administración de Eventos y Congresos (SAEC)</footer>
 </body>
 </html>

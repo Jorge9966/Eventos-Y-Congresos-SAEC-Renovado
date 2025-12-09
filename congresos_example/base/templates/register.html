@@ -77,12 +77,12 @@
         {% if selected_congreso %}
           <input type="hidden" name="c" value="{{ selected_congreso.id }}" />
         {% endif %}
-        <input type="hidden" name="tipo_usuario" id="tipo_usuario" value="participante">
+        <input type="hidden" name="tipo_usuario" id="tipo_usuario" value="{{ post_values.tipo_usuario|default:'participante' }}">
 
-        <div class="mb-3"><input name="first_name" type="text" class="form-control" placeholder="Nombre(s)" required></div>
-        <div class="mb-3"><input name="apellido_paterno" type="text" class="form-control" placeholder="Apellido Paterno" required></div>
-        <div class="mb-3"><input name="apellido_materno" type="text" class="form-control" placeholder="Apellido Materno" required></div>
-  <div class="mb-3"><input name="email" type="email" class="form-control" placeholder="Correo" required></div>
+          <div class="mb-3"><input name="first_name" type="text" class="form-control" placeholder="Nombre(s)" required value="{{ post_values.first_name|default:'' }}"></div>
+          <div class="mb-3"><input name="apellido_paterno" type="text" class="form-control" placeholder="Apellido Paterno" required value="{{ post_values.apellido_paterno|default:'' }}"></div>
+          <div class="mb-3"><input name="apellido_materno" type="text" class="form-control" placeholder="Apellido Materno" required value="{{ post_values.apellido_materno|default:'' }}"></div>
+        <div class="mb-3"><input name="email" type="email" class="form-control" placeholder="Correo" required value="{{ post_values.email|default:'' }}"></div>
         <div class="mb-3 position-relative">
           <input id="password" name="password" type="password" class="form-control" placeholder="Contraseña" required minlength="8" maxlength="16" pattern="(?=.{8,16}$)(?=.*[A-Z])(?=.*[a-z])(?=.*[\.!%&\$\}]).+" title="8-16 caracteres, con al menos 1 mayúscula, 1 minúscula y 1 símbolo especial (.!%&$})">
           <button type="button" class="btn btn-primary" 
@@ -96,7 +96,7 @@
         <!-- Contraseña de acceso del congreso (reemplaza clave de instructor) -->
         <div class="mb-3" id="congreso_password_wrap">
           <div class="position-relative">
-            <input id="congreso_password" name="congreso_password" type="password" class="form-control" placeholder="Contraseña de acceso del congreso">
+            <input id="congreso_password" name="congreso_password" type="password" class="form-control" placeholder="Contraseña de acceso del congreso" value="{{ post_values.congreso_password|default:'' }}">
             <button type="button" class="btn btn-primary" 
                     style="position:absolute; right:-2px; top:0; height:100%; border-radius:0 8px 8px 0;" 
                     onclick="togglePassword('congreso_password', this)">
@@ -111,7 +111,7 @@
             <select name="performance_level_id" class="form-control">
               <option value="">Selecciona tu nivel de desempeño</option>
               {% for lvl in levels %}
-                <option value="{{ lvl.id }}">{{ lvl.name }}</option>
+                <option value="{{ lvl.id }}" {% if post_values.performance_level_id|default:'' == lvl.id|stringformat:"s" %}selected{% endif %}>{{ lvl.name }}</option>
               {% endfor %}
             </select>
           {% else %}
@@ -125,27 +125,27 @@
           <div class="mb-3 extra-field" data-role-scope="{{ f.role_scope }}">
             <label class="form-label" style="color:#fff;">{{ f.name }}{% if not f.required %} (opcional){% endif %}</label>
             {% if f.field_type == 'text' %}
-              <input class="form-control" type="text" name="extra_{{ f.id }}" {% if f.required %}required{% endif %}>
+              <input class="form-control" type="text" name="extra_{{ f.id }}" {% if f.required %}required{% endif %} value="{{ f.posted_value|default:'' }}">
             {% elif f.field_type == 'email' %}
-              <input class="form-control" type="email" name="extra_{{ f.id }}" {% if f.required %}required{% endif %}>
+              <input class="form-control" type="email" name="extra_{{ f.id }}" {% if f.required %}required{% endif %} value="{{ f.posted_value|default:'' }}">
             {% elif f.field_type == 'number' %}
-              <input class="form-control" type="number" name="extra_{{ f.id }}" {% if f.required %}required{% endif %}>
+              <input class="form-control" type="number" name="extra_{{ f.id }}" {% if f.required %}required{% endif %} value="{{ f.posted_value|default:'' }}">
             {% elif f.field_type == 'date' %}
-              <input class="form-control" type="date" name="extra_{{ f.id }}" {% if f.required %}required{% endif %}>
+              <input class="form-control" type="date" name="extra_{{ f.id }}" {% if f.required %}required{% endif %} value="{{ f.posted_value|default:'' }}">
             {% elif f.field_type == 'boolean' %}
               <div class="form-check">
-                <input class="form-check-input" type="checkbox" id="extra_{{ f.id }}" name="extra_{{ f.id }}" {% if f.required %}required{% endif %}>
+                <input class="form-check-input" type="checkbox" id="extra_{{ f.id }}" name="extra_{{ f.id }}" {% if f.required %}required{% endif %} {% if f.posted_value %}checked{% endif %}>
                 <label class="form-check-label" for="extra_{{ f.id }}">Sí</label>
               </div>
             {% elif f.field_type == 'select' %}
               <select class="form-control" name="extra_{{ f.id }}" {% if f.required %}required{% endif %}>
                 <option value="">Selecciona una opción</option>
                 {% for opt in f.get_choices %}
-                  <option value="{{ opt }}">{{ opt }}</option>
+                  <option value="{{ opt }}" {% if f.posted_value == opt %}selected{% endif %}>{{ opt }}</option>
                 {% endfor %}
               </select>
             {% else %}
-              <input class="form-control" type="text" name="extra_{{ f.id }}" {% if f.required %}required{% endif %}>
+              <input class="form-control" type="text" name="extra_{{ f.id }}" {% if f.required %}required{% endif %} value="{{ f.posted_value|default:'' }}">
             {% endif %}
           </div>
         {% endfor %}
@@ -195,8 +195,14 @@
       });
     }
 
-    // Estado inicial
-    seleccionarTipo('participante');
+    // Estado inicial basado en el valor del servidor
+    (function(){
+      var initialTipo = "{{ post_values.tipo_usuario|default:'participante' }}";
+      if (initialTipo !== 'participante' && initialTipo !== 'instructor') {
+        initialTipo = 'participante';
+      }
+      seleccionarTipo(initialTipo);
+    })();
   </script>
   <script>
     function togglePassword(inputId, btn) {

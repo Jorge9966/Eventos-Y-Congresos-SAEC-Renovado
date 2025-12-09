@@ -41,15 +41,28 @@
             <input class="form-control" type="text" name="first_name" value="{{ membership.user.first_name }}" />
           </div>
           <div class="col-md-4">
+            <label class="form-label">Apellido paterno</label>
+            <input class="form-control" type="text" name="apellido_paterno" value="{{ ap_paterno }}" />
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Apellido materno</label>
+            <input class="form-control" type="text" name="apellido_materno" value="{{ ap_materno }}" />
+          </div>
+          <div class="col-md-4">
             <label class="form-label">Correo</label>
             <input class="form-control" type="email" name="email" value="{{ membership.user.email }}" />
           </div>
           <div class="col-md-4">
             <label class="form-label">Contraseña (dejar vacío para no cambiar)</label>
-            <input class="form-control" type="password" name="password" minlength="8" maxlength="16" />
+            <div class="input-group">
+              <input id="passwordInput" class="form-control" type="password" name="password" minlength="8" maxlength="16" />
+              <button class="btn btn-primary" type="button" id="togglePassword" aria-label="Mostrar u ocultar contraseña">
+                <i class="bi bi-eye-slash"></i>
+              </button>
+            </div>
           </div>
           <div class="col-md-4">
-            <label class="form-label">Nivel de desempeño</label>
+            <label class="form-label">Rol / Cargo / Semestre</label>
             <select class="form-select" name="performance_level_id">
               <option value="">-- Selecciona --</option>
               {% for lvl in levels %}
@@ -107,5 +120,41 @@
     </div>
     {% include 'partials/footer.html' %}
   </div>
+  <script>
+    (function(){
+      const input = document.getElementById('passwordInput');
+      const btn = document.getElementById('togglePassword');
+      if (input && btn) {
+        btn.addEventListener('click', function(){
+          const wasPwd = input.type === 'password';
+          input.type = wasPwd ? 'text' : 'password';
+          const isPwdNow = input.type === 'password';
+          const icon = btn.querySelector('i');
+          if (icon) {
+            // Ensure mutually exclusive classes based on new state
+            if (isPwdNow) {
+              icon.classList.add('bi-eye-slash');
+              icon.classList.remove('bi-eye');
+            } else {
+              icon.classList.add('bi-eye');
+              icon.classList.remove('bi-eye-slash');
+            }
+          }
+        });
+        // Ensure initial icon matches initial state
+        const icon = btn.querySelector('i');
+        if (icon) {
+          const isPwd = input.type === 'password';
+          if (isPwd) {
+            icon.classList.add('bi-eye-slash');
+            icon.classList.remove('bi-eye');
+          } else {
+            icon.classList.add('bi-eye');
+            icon.classList.remove('bi-eye-slash');
+          }
+        }
+      }
+    })();
+  </script>
 </body>
 </html>

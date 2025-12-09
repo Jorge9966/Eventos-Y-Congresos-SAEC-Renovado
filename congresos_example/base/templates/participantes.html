@@ -111,7 +111,7 @@
                 <tr>
                   <th><span class="es-blue">Nombre</span></th>
                   <th><span class="es-blue">Correo</span></th>
-                  <th><span class="es-blue">Nivel de desempeño</span></th>
+                  <th><span class="es-blue">Rol / Cargo / Semestre</span></th>
                   {% for f in extra_fields_participantes %}
                     <th><span class="es-blue">{{ f.name }}</span></th>
                   {% endfor %}
@@ -145,8 +145,8 @@
                           <input type="hidden" name="membership_id" value="{{ row.membership.id }}" />
                           <select name="status" class="form-select form-select-sm" title="Cambiar estatus" onchange="this.form.submit()" style="min-width:140px;" {% if not is_admin %}disabled{% endif %}>
                             <option value="" {% if row.status != 'approved' and row.status != 'rejected' %}selected{% endif %}>{% if row.status == 'pending' %}Pendiente{% else %}Status{% endif %}</option>
-                            <option value="rejected" {% if row.status == 'rejected' %}selected{% endif %}>No activo</option>
-                            <option value="approved" {% if row.status == 'approved' %}selected{% endif %}>Activar</option>
+                            <option value="rejected" {% if row.status == 'rejected' %}selected{% endif %}>Desactivado</option>
+                            <option value="approved" {% if row.status == 'approved' %}selected{% endif %}>Activado</option>
                           </select>
                           <a href="{% url 'usuario_editar_participante' congreso.id row.membership.id %}?next={{ request.get_full_path|urlencode }}" class="action-btn" title="Editar"><i class="bi bi-pencil"></i></a>
                           <button type="button" class="action-btn" title="Eliminar" onclick="if(confirm('¿Eliminar esta membresía? Esta acción no se puede deshacer.')){ var f=this.closest('form'); f.querySelector('input[name=action]').value='delete_membership'; f.submit(); }" {% if not is_admin %}disabled{% endif %}>

@@ -5,6 +5,10 @@
   <title>Imprimir participantes - {{ taller.title }}</title>
   {% load static extra_filters %}
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- ExcelJS (para estilos reales en XLSX) y FileSaver -->
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
   <style>
     @media print {
       .no-print { display: none !important; }
@@ -16,6 +20,9 @@
     .page-title { font-weight:800; margin:0; }
     .controls { margin:12px 0 18px; }
     table th, table td { vertical-align: middle; }
+    /* Ocultar la firma simple solo durante impresión cuando se agreguen dinámicas */
+    @media print { .hide-print { display:none!important; } }
+    .sig-col { width: 140px; }
   </style>
 </head>
 <body class="container py-3">
@@ -26,6 +33,13 @@
     <div>
       <h1 class="page-title h4">Lista de participantes</h1>
       <div class="text-muted">Taller: {{ taller.title }}</div>
+      <div class="text-muted">Total inscritos: {{ inscripciones|length }}</div>
+      {% if taller.instructor %}
+        <div class="text-muted">Instructor: {{ taller.instructor.get_full_name|default:taller.instructor.username }}</div>
+      {% endif %}
+      {% if taller.lugar %}
+        <div class="text-muted">Lugar: {{ taller.lugar }}</div>
+      {% endif %}
     </div>
   </div>
 
@@ -33,25 +47,35 @@
     <label class="form-label mb-0" for="orderBy">Ordenar por:</label>
     <select id="orderBy" class="form-select" style="max-width:280px;">
       <option value="nombre" selected>Nombre</option>
+      <option value="apellidos">Apellidos</option>
       <option value="nivel">Nivel de desempeño</option>
+      <option value="correo">Correo</option>
+      <option value="numero"># Enumeración</option>
       {% for ef in extra_fields %}
         <option value="extra{{ ef.id }}">{{ ef.name }}</option>
       {% endfor %}
     </select>
-    <button class="btn btn-dark ms-auto" onclick="window.print()">Imprimir</button>
+    <button id="orderDirBtn" class="btn btn-outline-secondary" type="button" title="Orden ascendente" aria-label="Cambiar orden">
+      ↑↓
+    </button>
+    <div class="ms-auto d-flex gap-2">
+      <button class="btn btn-secondary" type="button" onclick="downloadXlsx()">Descargar</button>
+      <button class="btn btn-dark" type="button" onclick="prepareSignaturesAndPrint()">Imprimir</button>
+    </div>
   </div>
 
   <div class="table-responsive">
     <table class="table table-bordered align-middle" id="tabla">
       <thead class="table-light">
         <tr>
+          <th style="width:60px">#</th>
           <th>Nombre</th>
           <th>Correo</th>
           <th>Nivel de desempeño</th>
           {% for ef in extra_fields %}
             <th>{{ ef.name }}</th>
           {% endfor %}
-          <th>Firma</th>
+          <th class="single-signature">Firma</th>
         </tr>
       </thead>
       <tbody>
@@ -59,21 +83,29 @@
           {% with peruser=extra_values_by_user|get_item:ins.user.id %}
           <tr
             data-nombre="{{ ins.user.get_full_name|default:ins.user.username|lower }}"
+            data-apellidos="{{ ins.user.last_name|default:''|lower }}"
             data-nivel="{{ ins.performance_level.name|default:''|lower }}"
+            data-correo="{{ ins.user.email|default:''|lower }}"
+            data-numero="{{ forloop.counter }}"
             {% for ef in extra_fields %}
               data-extra{{ ef.id }}="{{ peruser|get_item:ef.id|default:''|lower }}"
             {% endfor %}
           >
-            <td>{{ ins.user.get_full_name|default:ins.user.username }}</td>
+            <td class="text-center">{{ forloop.counter }}</td>
+            <td class="name-cell">
+              <span class="name-first">{% if ins.user.first_name or ins.user.last_name %}{{ ins.user.first_name }}{% if ins.user.last_name %} {{ ins.user.last_name }}{% endif %}{% else %}{{ ins.user.get_full_name|default:ins.user.username }}{% endif %}</span>
+              <span class="name-last" style="display:none;">{% if ins.user.first_name or ins.user.last_name %}{% if ins.user.last_name %}{{ ins.user.last_name }}{% endif %}{% if ins.user.first_name %} {{ ins.user.first_name }}{% endif %}{% else %}{{ ins.user.get_full_name|default:ins.user.username }}{% endif %}</span>
+            </td>
             <td>{{ ins.user.email|default:"—" }}</td>
             <td>{{ ins.performance_level.name|default:"—" }}</td>
             {% for ef in extra_fields %}
               <td>{{ peruser|get_item:ef.id|default:"—" }}</td>
             {% endfor %}
-            <td style="width:160px"></td>
+            <td class="signature-cell single-signature" style="width:160px"></td>
           </tr>
           {% endwith %}
         {% endfor %}
+      </tbody>
       </tbody>
     </table>
   </div>
@@ -82,19 +114,157 @@
     (function(){
       const select = document.getElementById('orderBy');
       const tbody = document.querySelector('#tabla tbody');
+      let ascending = true;
+      const orderBtn = document.getElementById('orderDirBtn');
       function sortBy(key){
         const dsKey = key; // matches data-* attribute suffix (e.g., nombre, extra12)
         const rows = Array.from(tbody.querySelectorAll('tr'));
         rows.sort((a,b)=>{
           const av = (a.dataset[dsKey]||'').toString();
           const bv = (b.dataset[dsKey]||'').toString();
-          return av.localeCompare(bv, 'es', {sensitivity:'base', numeric:true});
+          const cmp = av.localeCompare(bv, 'es', {sensitivity:'base', numeric:true});
+          return ascending ? cmp : -cmp;
         });
         rows.forEach(r=>tbody.appendChild(r));
       }
-      select.addEventListener('change', ()=> sortBy(select.value));
+      function updateNameDisplay(){
+        const by = select.value;
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        rows.forEach(r=>{
+          const cell = r.querySelector('.name-cell');
+          if(!cell) return;
+          const first = cell.querySelector('.name-first');
+          const last = cell.querySelector('.name-last');
+          const showLast = (by === 'apellidos');
+          if(first && last){
+            first.style.display = showLast ? 'none' : '';
+            last.style.display = showLast ? '' : 'none';
+          }
+        });
+      }
+      select.addEventListener('change', ()=> { sortBy(select.value); updateNameDisplay(); });
+      orderBtn.addEventListener('click', ()=>{
+        ascending = !ascending;
+        orderBtn.title = ascending ? 'Orden ascendente' : 'Orden descendente';
+        orderBtn.textContent = ascending ? '↑↓' : '↓↑';
+        sortBy(select.value);
+      });
       sortBy(select.value);
+      updateNameDisplay();
     })();
+  </script>
+  <script>
+    function prepareSignaturesAndPrint(){
+      try{
+        const countStr = prompt('¿En cuántos días se va a desarrollar el taller?', '1');
+        if(countStr === null) return;
+        const count = Math.max(0, parseInt(countStr||'0', 10));
+        const labels = [];
+        for(let i=1;i<=count;i++){
+          const v = prompt(`Ingresa título para la firma/fecha del día ${i}`, 'Firma');
+          if(v === null) return;
+          labels.push((v||'').trim());
+        }
+
+        const table = document.getElementById('tabla');
+        const theadRow = table.querySelector('thead tr');
+        const singleHeader = theadRow.querySelector('th.single-signature');
+        const singleCells = table.querySelectorAll('td.single-signature');
+        singleHeader && singleHeader.classList.add('hide-print');
+        singleCells.forEach(td=>td.classList.add('hide-print'));
+
+        const injected = [];
+        labels.forEach((label, idx)=>{
+          const th = document.createElement('th'); th.className = 'sig-col print-inject'; th.textContent = label || `Firma ${idx+1} Fecha`; theadRow.appendChild(th); injected.push(th);
+        });
+        const rows = table.querySelectorAll('tbody tr');
+        rows.forEach(tr=>{
+          labels.forEach(()=>{ const td = document.createElement('td'); td.className='signature-cell sig-col print-inject'; tr.appendChild(td); });
+        });
+
+        window.print();
+
+        document.querySelectorAll('.print-inject').forEach(el=>{ el.parentElement && el.parentElement.removeChild(el); });
+        singleHeader && singleHeader.classList.remove('hide-print');
+        singleCells.forEach(td=>td.classList.remove('hide-print'));
+      }catch(e){ console.error(e); window.print(); }
+    }
+  </script>
+  <script>
+    function getSafeFilename(base){
+      const date = new Date();
+      const yyyy = date.getFullYear();
+      const mm = String(date.getMonth()+1).padStart(2,'0');
+      const dd = String(date.getDate()).padStart(2,'0');
+      const clean = String(base||'').replace(/[^\w\-\s]/g,'').replace(/\s+/g,'_');
+      return `${clean}_${yyyy}-${mm}-${dd}.xlsx`;
+    }
+
+    async function downloadXlsx(){
+      const wb = new ExcelJS.Workbook();
+      // Resumen
+      const wsRes = wb.addWorksheet('Resumen');
+      const resumen = [
+        ['Congreso', '{{ congreso.name|escapejs }}'],
+        ['Taller', '{{ taller.title|escapejs }}'],
+        ['Descripción', '{% if taller.description %}{{ taller.description|first_line|escapejs }}{% else %}—{% endif %}'],
+        ['Instructor', '{% if taller.instructor %}{{ taller.instructor.get_full_name|default:taller.instructor.username|escapejs }}{% else %}—{% endif %}'],
+        ['Lugar', '{% if taller.lugar %}{{ taller.lugar|escapejs }}{% else %}—{% endif %}'],
+        ['Fecha de generación', new Date().toLocaleString()]
+      ];
+      wsRes.addRows(resumen);
+      wsRes.columns = [{ width: 18 }, { width: 120 }];
+      // Estilos visibles en Resumen: bordes negros, ajuste y etiquetas en negritas
+      for(let r=1; r<=resumen.length; r++){
+        for(let c=1; c<=2; c++){
+          const cell = wsRes.getCell(r, c);
+          cell.alignment = { wrapText: true, vertical: 'top' };
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FF000000' } },
+            bottom: { style: 'thin', color: { argb: 'FF000000' } },
+            left: { style: 'thin', color: { argb: 'FF000000' } },
+            right: { style: 'thin', color: { argb: 'FF000000' } }
+          };
+          if (c === 1) cell.font = { bold: true };
+        }
+      }
+      // Participantes
+      const ws = wb.addWorksheet('Participantes', {views:[{state:'frozen', ySplit:1}]});
+      const table = document.getElementById('tabla');
+      let header = Array.from(table.querySelectorAll('thead th')).map(th => th.innerText.trim());
+      if (header[header.length-1] === 'Firma') { header = header.slice(0, -1); }
+      ws.addRow(header);
+      const rows = Array.from(table.querySelectorAll('tbody tr'));
+      rows.forEach(tr => {
+        let tds = Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim());
+        if (tds.length && header.length < tds.length) { tds = tds.slice(0, header.length); }
+        ws.addRow(tds);
+      });
+      // Column widths
+      const widths = [6, 28, 30, 20];
+      ws.columns = widths.concat(Array(Math.max(0, header.length - widths.length)).fill(18))
+        .map(w => ({ width: w }));
+      // Header bold
+      ws.getRow(1).eachCell(c => { c.font = { bold: true }; });
+      // Wrap/align and borders for all cells
+      const maxRow = ws.rowCount;
+      const maxCol = header.length;
+      for(let r=1; r<=maxRow; r++){
+        for(let c=1; c<=maxCol; c++){
+          const cell = ws.getCell(r, c);
+          cell.alignment = { wrapText: true, vertical: 'top' };
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FF000000' } },
+            bottom: { style: 'thin', color: { argb: 'FF000000' } },
+            left: { style: 'thin', color: { argb: 'FF000000' } },
+            right: { style: 'thin', color: { argb: 'FF000000' } }
+          };
+        }
+      }
+      const fname = getSafeFilename('participantes_taller_' + ('{{ taller.title|escapejs }}'));
+      const buf = await wb.xlsx.writeBuffer();
+      saveAs(new Blob([buf], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}), fname);
+    }
   </script>
 </body>
 </html>

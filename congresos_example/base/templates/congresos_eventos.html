@@ -129,9 +129,9 @@
     {% include 'partials/topbar.html' %}
     <section class="hero-banner">
       <div class="hero-content">
-  <h1 class="hero-title">Congresos o eventos</h1>
+  <h1 class="hero-title">Eventos y Congresos</h1>
         <div>
-          <a class="btn-purple" href="{% url 'congreso_evento' %}">Agregar nuevo congreso o evento ➜</a>
+          <a class="btn-purple" href="{% url 'congreso_evento' %}">Agregar nuevo evento y/o congreso ➜</a>
         </div>
       </div>
     </section>
@@ -177,7 +177,7 @@
               <a class="icon-btn-sm icon-yellow" title="Editar" href="{% url 'editar_congreso_evento' cg.id %}">
                 <i class="bi bi-pencil"></i>
               </a>
-              <form method="post" onsubmit="return confirm('¿Eliminar este congreso?');">
+              <form method="post" onsubmit="return confirmDeleteCongreso('{{ cg.name|escapejs }}');">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="delete_congreso" />
                 <input type="hidden" name="congreso_id" value="{{ cg.id }}" />
@@ -213,6 +213,14 @@
         userMenu.addEventListener('click', function(e){ e.stopPropagation(); });
       }
     })();
+
+    // Doble confirmación al eliminar un congreso
+    function confirmDeleteCongreso(nombre){
+      var first = confirm('¿Eliminar el congreso "' + nombre + '"?');
+      if(!first) return false;
+      var second = confirm('Atención: se eliminarán TODOS los datos asociados a "' + nombre + '" (administrador del congreso, dominios permitidos, campos, niveles de desempeño, talleres, concursos, conferencias, instructores, participantes, equipos e inscripciones). ¿Deseas continuar?');
+      return second;
+    }
   </script>
 </body>
 </html>

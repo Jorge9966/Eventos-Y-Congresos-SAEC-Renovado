@@ -90,7 +90,7 @@
     <section class="hero-banner">
       <div>
         <h1 class="hero-title">Campos personalizados de registro</h1>
-        <div class="hero-subtitle">Crea campos adicionales que se solicitarán al registrarse en un congreso.</div>
+        <div class="hero-subtitle">Crea campos adicionales que se solicitarán al registrarse en un evento y congreso.</div>
       </div>
     </section>
 
@@ -103,12 +103,12 @@
     {% endif %}
 
     <div class="table-card" style="margin-top:20px;">
-      <div class="card-header"><span class="es-blue">Campos por congreso</span></div>
+      <div class="card-header"><span class="es-blue">Campos requeridos por evento y congreso</span></div>
       <div class="card-body">
         <div class="table-controls">
           <div class="controls-left">
             <form method="get" id="congresoForm" style="display:flex; align-items:center; gap:10px;">
-              <label for="congresoSelect">Congreso:</label>
+              <label for="congresoSelect">Evento y Congreso:</label>
               <select id="congresoSelect" name="c" onchange="document.getElementById('congresoForm').submit()">
                 {% for cg in congresos %}
                   <option value="{{ cg.id }}" {% if congreso.id == cg.id %}selected{% endif %}>{{ cg.name }}</option>
@@ -166,7 +166,7 @@
               {% endfor %}
             {% else %}
               <tr>
-                <td colspan="6" style="text-align:center; color:#64748b; padding:26px;">No hay campos definidos para este congreso.</td>
+                <td colspan="6" style="text-align:center; color:#64748b; padding:26px;">No hay campos requeridos definidos para este evento y congreso.</td>
               </tr>
             {% endif %}
           </tbody>
@@ -183,9 +183,9 @@
     <div class="table-card" style="margin-top:20px;">
       <div class="card-header">
         {% if edit_field %}
-          <span class="es-blue">Actualizar campo</span>
+          <span class="es-blue">Actualizar campo requerido</span>
         {% else %}
-          <span class="es-blue">Agregar un nuevo campo</span>
+          <span class="es-blue">Agregar un nuevo campo requerido</span>
         {% endif %}
       </div>
       <div class="card-body" style="padding:16px; background:#fff;">

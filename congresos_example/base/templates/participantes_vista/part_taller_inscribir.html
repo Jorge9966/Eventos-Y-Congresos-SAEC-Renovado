@@ -131,8 +131,10 @@
           <div>
             {% if ya_inscrito %}
               <span class="btn btn-success disabled" aria-disabled="true">Ya inscrito en este taller</span>
-            {% elif otro_taller_inscrito %}
+            {% elif otro_taller_inscrito and max_talleres_por_participante|default:99 <= 1 %}
               <span class="btn btn-secondary disabled" aria-disabled="true">Ya inscrito en otro taller</span>
+            {% elif max_talleres_por_participante and inscritos_count_talleres|default:0 >= max_talleres_por_participante %}
+              <span class="btn btn-secondary disabled" aria-disabled="true">Alcanzaste el máximo de talleres</span>
             {% elif not approved %}
               <span class="btn btn-secondary disabled" aria-disabled="true">Inscribirme</span>
             {% elif capacidad and inscritos|default:0 >= capacidad %}
@@ -189,7 +191,7 @@
                   <tr>
                     <th>Nombre</th>
                     <th>Correo</th>
-                    <th>Nivel</th>
+                    <th>Rol / Cargo / Semestre</th>
                     {% for f in extra_fields %}
                       <th>{{ f.name }}</th>
                     {% endfor %}

@@ -136,8 +136,8 @@
           <div>
             {% if ya_inscrito %}
               <span class="btn btn-success disabled" aria-disabled="true">Ya inscrito en este concurso</span>
-            {% elif otro_concurso_inscrito %}
-              <span class="btn btn-secondary disabled" aria-disabled="true">Ya inscrito en otro concurso</span>
+            {% elif reached_max_concursos %}
+              <span class="btn btn-secondary disabled" aria-disabled="true">Has alcanzado tu máximo de concursos</span>
             {% elif not approved %}
               <span class="btn btn-secondary disabled" aria-disabled="true">Inscribirme</span>
             {% elif concurso.type == 'individual' and capacidad and inscritos|default:0 >= capacidad %}
@@ -214,7 +214,7 @@
                         <tr>
                           <th>Nombre</th>
                           <th>Correo</th>
-                          <th>Nivel</th>
+                          <th>Rol / Cargo / Semestre</th>
                           {% for f in extra_fields %}<th>{{ f.name }}</th>{% endfor %}
                         </tr>
                       </thead>
@@ -224,7 +224,7 @@
                           <tr>
                             <td>{{ ins.user.get_full_name|default:ins.user.username }}</td>
                             <td>{{ ins.user.email }}</td>
-                            <td>{% if ins.performance_level %}{{ ins.performance_level.name }}{% else %}—{% endif %}</td>
+                            <td>{{ row.level_name|default:"—" }}</td>
                             {% for v in row.values_ordered %}<td>{{ v|default:"" }}</td>{% endfor %}
                           </tr>
                           {% endwith %}
@@ -243,7 +243,7 @@
                         <tr>
                           <th>Nombre</th>
                           <th>Correo</th>
-                          <th>Nivel</th>
+                          <th>Rol / Cargo / Semestre</th>
                           {% for f in extra_fields %}<th>{{ f.name }}</th>{% endfor %}
                         </tr>
                       </thead>
@@ -253,7 +253,7 @@
                           <tr>
                             <td>{{ ins.user.get_full_name|default:ins.user.username }}</td>
                             <td>{{ ins.user.email }}</td>
-                            <td>{% if ins.performance_level %}{{ ins.performance_level.name }}{% else %}—{% endif %}</td>
+                            <td>{{ row.level_name|default:"—" }}</td>
                             {% for v in row.values_ordered %}<td>{{ v|default:"" }}</td>{% endfor %}
                           </tr>
                           {% endwith %}
@@ -274,7 +274,7 @@
                     <tr>
                       <th>Nombre</th>
                       <th>Correo</th>
-                      <th>Nivel</th>
+                      <th>Rol / Cargo / Semestre</th>
                       {% for f in extra_fields %}
                         <th>{{ f.name }}</th>
                       {% endfor %}
@@ -316,7 +316,7 @@
           </div>
         </div>
       </div>
-      {% if concurso.type == 'grupal' and approved and not ya_inscrito and not otro_concurso_inscrito %}
+      {% if concurso.type == 'grupal' and approved and not ya_inscrito and not reached_max_concursos %}
         {% if capacidad and inscritos|default:0 >= capacidad %}
           {# Capacidad llena: no mostrar modal de inscripción #}
         {% else %}

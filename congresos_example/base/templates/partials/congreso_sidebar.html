@@ -38,7 +38,7 @@
   {% with url_name=request.resolver_match.url_name %}
   {# Grupo: Congreso #}
   <div class="nav-item link-toggle {% if url_name in 'talleres_list,concursos_list,conferencias_list,inicio_congreso,taller_nuevo,taller_editar,taller_participantes,concurso_nuevo,concurso_editar,concurso_participantes,conferencia_nueva,conferencia_editar,conferencia_participantes' or 'congreso/' in request.path %}open{% endif %}" data-target="#sb-congreso">
-    <i class="bi bi-folder"></i> <span>Congreso</span> <i class="bi bi-chevron-right chev"></i>
+    <i class="bi bi-folder"></i> <span>Evento y Congreso</span> <i class="bi bi-chevron-right chev"></i>
   </div>
   <div id="sb-congreso" class="submenu {% if url_name in 'talleres_list,concursos_list,conferencias_list,inicio_congreso,taller_nuevo,taller_editar,taller_participantes,concurso_nuevo,concurso_editar,concurso_participantes,conferencia_nueva,conferencia_editar,conferencia_participantes' or 'congreso/' in request.path %}open{% endif %}">
     <a class="nav-item {% if url_name == 'talleres_list' %}active{% endif %}" href="{% url 'talleres_list' congreso.id %}">Talleres</a>

@@ -35,6 +35,19 @@ class Congreso(models.Model):
 	created_at = models.DateTimeField(auto_now_add=True)
 	# Contraseña de acceso al registro/membresía para este congreso (almacenada como hash)
 	access_password_hash = models.CharField(max_length=128, null=True, blank=True)
+	# Cantidad exacta por participante (opcional). Si está vacío, no se aplica requisito/límite.
+	talleres_por_participante = models.PositiveSmallIntegerField(
+		null=True, blank=True, verbose_name="Talleres por participante",
+		help_text="Número exacto de talleres permitidos/exigidos por participante. Vacío = sin restricción."
+	)
+	conferencias_por_participante = models.PositiveSmallIntegerField(
+		null=True, blank=True, verbose_name="Conferencias por participante",
+		help_text="Número exacto de conferencias permitidas/exigidas por participante. Vacío = sin restricción."
+	)
+	concursos_por_participante = models.PositiveSmallIntegerField(
+		null=True, blank=True, verbose_name="Concursos por participante",
+		help_text="Número exacto de concursos permitidos/exigidos por participante. Vacío = sin restricción."
+	)
 
 	def save(self, *args, **kwargs):
 		if not self.slug:
@@ -417,11 +430,15 @@ class UserExtraFieldValue(models.Model):
 	user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="extra_field_values")
 	congreso = models.ForeignKey(Congreso, null=True, blank=True, on_delete=models.CASCADE, related_name="extra_field_values")
 	field = models.ForeignKey(ExtraField, on_delete=models.CASCADE, related_name="values")
-	value = models.TextField("Valor")
+	value = models.CharField("Valor", max_length=500)
 	created_at = models.DateTimeField(auto_now_add=True)
 
 	class Meta:
 		unique_together = ("user", "congreso", "field")
+		constraints = [
+			# Evita valores repetidos para el mismo campo y alcance de congreso
+			models.UniqueConstraint(fields=["field", "congreso", "value"], name="uniq_extrafieldvalue_field_congreso_value")
+		]
 
 	def __str__(self) -> str:
 		cg = self.congreso.name if self.congreso else "Global"

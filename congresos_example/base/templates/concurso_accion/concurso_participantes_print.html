@@ -5,6 +5,11 @@
   <title>Imprimir participantes - {{ concurso.title }}</title>
   {% load static extra_filters %}
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- ExcelJS (para estilos reales en XLSX) y FileSaver -->
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+  <script src="{% static 'base/concurso_export.js' %}"></script>
   <style>
     @media print { .no-print { display:none!important; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
     body { background:#fff; }
@@ -13,6 +18,9 @@
     .page-title { font-weight:800; margin:0; }
     .controls { margin:12px 0 18px; }
     table th, table td { vertical-align: middle; }
+    /* Utilidad para ocultar elementos solo en impresión */
+    @media print { .hide-print { display:none!important; } }
+    .sig-col { width: 140px; }
   </style>
 </head>
 <body class="container py-3">
@@ -23,82 +31,226 @@
     <div>
       <h1 class="page-title h4">Lista de participantes</h1>
       <div class="text-muted">Concurso: {{ concurso.title }}</div>
+      {% if concurso.type == 'grupal' %}
+        <div class="text-muted">Equipos inscritos: {{ teams_rows|length|default:0 }}</div>
+      {% else %}
+        <div class="text-muted">Total inscritos: {{ inscripciones|length }}</div>
+      {% endif %}
+      {% if concurso.instructor %}
+        <div class="text-muted">Instructor: {{ concurso.instructor.get_full_name|default:concurso.instructor.username }}</div>
+      {% endif %}
+      {% if concurso.lugar %}
+        <div class="text-muted">Lugar: {{ concurso.lugar }}</div>
+      {% endif %}
     </div>
   </div>
 
   {% if concurso.type == 'grupal' %}
     <div class="controls no-print d-flex align-items-center gap-2">
-      <button class="btn btn-dark ms-auto" onclick="window.print()">Imprimir</button>
+      <div class="ms-auto d-flex gap-2">
+        <button class="btn btn-secondary" type="button" onclick="handleDownloadGrupal()">Descargar</button>
+        <button class="btn btn-dark" type="button" onclick="prepareSignaturesAndPrint()">Imprimir</button>
+      </div>
     </div>
 
     {% if teams_rows %}
       {% for t in teams_rows %}
         <h5 class="mt-4 mb-2">Equipo: {{ t.equipo.nombre }}</h5>
+        <div class="controls no-print d-flex align-items-center gap-2">
+          <label class="form-label mb-0" for="orderByTeam{{ forloop.counter }}">Ordenar por:</label>
+          <select id="orderByTeam{{ forloop.counter }}" class="form-select" style="max-width:280px;">
+            <option value="nombre" selected>Nombre</option>
+            <option value="apellidos">Apellidos</option>
+            <option value="nivel">Nivel de desempeño</option>
+            <option value="correo">Correo</option>
+            <option value="numero"># Enumeración</option>
+            {% for ef in extra_fields %}
+              <option value="extra{{ ef.id }}">{{ ef.name }}</option>
+            {% endfor %}
+          </select>
+          <button id="orderDirTeam{{ forloop.counter }}" class="btn btn-outline-secondary" type="button" title="Orden ascendente" aria-label="Cambiar orden">↑↓</button>
+        </div>
         <div class="table-responsive">
-          <table class="table table-bordered align-middle">
+          <table class="table table-bordered align-middle team-table" id="tablaTeam{{ forloop.counter }}">
             <thead class="table-light">
               <tr>
+                <th style="width:60px">#</th>
                 <th>Nombre</th>
                 <th>Correo</th>
                 <th>Nivel de desempeño</th>
                 {% for ef in extra_fields %}
                   <th>{{ ef.name }}</th>
                 {% endfor %}
-                <th>Firma</th>
+                <th class="single-signature">Firma</th>
               </tr>
             </thead>
             <tbody>
               {% for row in t.rows %}
                 {% with ins=row.ins %}
-                <tr>
-                  <td>{{ ins.user.get_full_name|default:ins.user.username }}</td>
+                <tr
+                  data-nombre="{{ ins.user.get_full_name|default:ins.user.username|lower }}"
+                  data-correo="{{ ins.user.email|default:''|lower }}"
+                  data-numero="{{ forloop.counter }}"
+                  data-apellidos="{{ ins.user.last_name|default:''|lower }}"
+                  data-nivel="{{ ins.performance_level.name|default:''|lower }}"
+                  {% for pair in extra_fields|zip_values:row.values_ordered %}
+                    data-extra{{ pair.id }}="{{ pair.value|default:''|lower }}"
+                  {% endfor %}
+                >
+                  <td class="text-center">{{ forloop.counter }}</td>
+                  <td class="name-cell">
+                    <span class="name-first">{% if ins.user.first_name or ins.user.last_name %}{{ ins.user.first_name }}{% if ins.user.last_name %} {{ ins.user.last_name }}{% endif %}{% else %}{{ ins.user.get_full_name|default:ins.user.username }}{% endif %}</span>
+                    <span class="name-last" style="display:none;">{% if ins.user.first_name or ins.user.last_name %}{% if ins.user.last_name %}{{ ins.user.last_name }}{% endif %}{% if ins.user.first_name %} {{ ins.user.first_name }}{% endif %}{% else %}{{ ins.user.get_full_name|default:ins.user.username }}{% endif %}</span>
+                  </td>
                   <td>{{ ins.user.email|default:"—" }}</td>
-                  <td>{{ ins.performance_level.name|default:"—" }}</td>
+                  <td>
+                    {% if row.ins and row.ins.performance_level and row.ins.performance_level.name %}
+                      {{ row.ins.performance_level.name }}
+                    {% elif ins.performance_level and ins.performance_level.name %}
+                      {{ ins.performance_level.name }}
+                    {% elif row.performance_level %}
+                      {{ row.performance_level }}
+                    {% elif row.nivel %}
+                      {{ row.nivel }}
+                    {% else %}
+                      {{ ins.user|performance_level_for:congreso|default:"—" }}
+                    {% endif %}
+                  </td>
                   {% for val in row.values_ordered %}
                     <td>{{ val|default:"—" }}</td>
                   {% endfor %}
-                  <td style="width:160px"></td>
+                  <td class="signature-cell single-signature" style="width:160px"></td>
                 </tr>
                 {% endwith %}
               {% endfor %}
             </tbody>
           </table>
         </div>
+        <script>
+          (function(){
+            const select = document.getElementById('orderByTeam{{ forloop.counter }}');
+            const tbody = document.querySelector('#tablaTeam{{ forloop.counter }} tbody');
+            const orderBtn = document.getElementById('orderDirTeam{{ forloop.counter }}');
+            let ascending = true;
+            function sortBy(key){
+              const rows = Array.from(tbody.querySelectorAll('tr'));
+              rows.sort((a,b)=>{
+                const av = (a.dataset[key]||'').toString();
+                const bv = (b.dataset[key]||'').toString();
+                const cmp = av.localeCompare(bv, 'es', {sensitivity:'base', numeric:true});
+                return ascending ? cmp : -cmp;
+              });
+              rows.forEach(r=>tbody.appendChild(r));
+            }
+            select.addEventListener('change', ()=> sortBy(select.value));
+            orderBtn.addEventListener('click', ()=>{
+              ascending = !ascending;
+              orderBtn.title = ascending ? 'Orden ascendente' : 'Orden descendente';
+              orderBtn.textContent = ascending ? '↑↓' : '↓↑';
+              sortBy(select.value);
+            });
+            sortBy(select.value);
+          })();
+        </script>
+
       {% endfor %}
     {% endif %}
 
     {% if orphan_rows %}
+      <div class="controls no-print d-flex align-items-center gap-2">
+        <label class="form-label mb-0" for="orderByOrphans">Ordenar por:</label>
+        <select id="orderByOrphans" class="form-select" style="max-width:280px;">
+          <option value="nombre" selected>Nombre</option>
+          <option value="apellidos">Apellidos</option>
+          <option value="nivel">Nivel de desempeño</option>
+          <option value="correo">Correo</option>
+          <option value="numero"># Enumeración</option>
+          {% for ef in extra_fields %}
+            <option value="extra{{ ef.id }}">{{ ef.name }}</option>
+          {% endfor %}
+        </select>
+        <button id="orderDirOrphans" class="btn btn-outline-secondary" type="button" title="Orden ascendente" aria-label="Cambiar orden">↑↓</button>
+      </div>
       <h5 class="mt-4 mb-2">Sin equipo</h5>
       <div class="table-responsive">
-        <table class="table table-bordered align-middle">
+        <table class="table table-bordered align-middle" id="tablaOrphans">
           <thead class="table-light">
             <tr>
+              <th style="width:60px">#</th>
               <th>Nombre</th>
               <th>Correo</th>
               <th>Nivel de desempeño</th>
               {% for ef in extra_fields %}
                 <th>{{ ef.name }}</th>
               {% endfor %}
-              <th>Firma</th>
+              <th class="single-signature">Firma</th>
             </tr>
           </thead>
           <tbody>
             {% for row in orphan_rows %}
               {% with ins=row.ins %}
-              <tr>
-                <td>{{ ins.user.get_full_name|default:ins.user.username }}</td>
+              <tr
+                data-nombre="{{ ins.user.get_full_name|default:ins.user.username|lower }}"
+                data-correo="{{ ins.user.email|default:''|lower }}"
+                data-numero="{{ forloop.counter }}"
+                data-apellidos="{{ ins.user.last_name|default:''|lower }}"
+                data-nivel="{{ ins.performance_level.name|default:''|lower }}"
+              >
+                <td class="text-center">{{ forloop.counter }}</td>
+                <td class="name-cell">
+                  <span class="name-first">{% if ins.user.first_name or ins.user.last_name %}{{ ins.user.first_name }}{% if ins.user.last_name %} {{ ins.user.last_name }}{% endif %}{% else %}{{ ins.user.get_full_name|default:ins.user.username }}{% endif %}</span>
+                  <span class="name-last" style="display:none;">{% if ins.user.first_name or ins.user.last_name %}{% if ins.user.last_name %}{{ ins.user.last_name }}{% endif %}{% if ins.user.first_name %} {{ ins.user.first_name }}{% endif %}{% else %}{{ ins.user.get_full_name|default:ins.user.username }}{% endif %}</span>
+                </td>
                 <td>{{ ins.user.email|default:"—" }}</td>
-                <td>{{ ins.performance_level.name|default:"—" }}</td>
+                <td>
+                  {% if row.ins and row.ins.performance_level and row.ins.performance_level.name %}
+                    {{ row.ins.performance_level.name }}
+                  {% elif ins.performance_level and ins.performance_level.name %}
+                    {{ ins.performance_level.name }}
+                  {% elif row.performance_level %}
+                    {{ row.performance_level }}
+                  {% elif row.nivel %}
+                    {{ row.nivel }}
+                  {% else %}
+                    {{ ins.user|performance_level_for:congreso|default:"—" }}
+                  {% endif %}
+                </td>
                 {% for val in row.values_ordered %}
                   <td>{{ val|default:"—" }}</td>
                 {% endfor %}
-                <td style="width:160px"></td>
+                <td class="signature-cell single-signature" style="width:160px"></td>
               </tr>
               {% endwith %}
             {% endfor %}
           </tbody>
         </table>
       </div>
+      <script>
+        (function(){
+          const select = document.getElementById('orderByOrphans');
+          const tbody = document.querySelector('#tablaOrphans tbody');
+          const orderBtn = document.getElementById('orderDirOrphans');
+          let ascending = true;
+          function sortBy(key){
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            rows.sort((a,b)=>{
+              const av = (a.dataset[key]||'').toString();
+              const bv = (b.dataset[key]||'').toString();
+              const cmp = av.localeCompare(bv, 'es', {sensitivity:'base', numeric:true});
+              return ascending ? cmp : -cmp;
+            });
+            rows.forEach(r=>tbody.appendChild(r));
+          }
+          select.addEventListener('change', ()=> sortBy(select.value));
+          orderBtn.addEventListener('click', ()=>{
+            ascending = !ascending;
+            orderBtn.title = ascending ? 'Orden ascendente' : 'Orden descendente';
+            orderBtn.textContent = ascending ? '↑↓' : '↓↑';
+            sortBy(select.value);
+          });
+          sortBy(select.value);
+        })();
+      </script>
     {% endif %}
     {% if not teams_rows and not orphan_rows %}
       <div class="text-muted">Aún no hay participantes registrados para este concurso.</div>
@@ -108,25 +260,33 @@
       <label class="form-label mb-0" for="orderBy">Ordenar por:</label>
       <select id="orderBy" class="form-select" style="max-width:280px;">
         <option value="nombre" selected>Nombre</option>
+        <option value="apellidos">Apellidos</option>
         <option value="nivel">Nivel de desempeño</option>
+        <option value="correo">Correo</option>
+        <option value="numero"># Enumeración</option>
         {% for ef in extra_fields %}
           <option value="extra{{ ef.id }}">{{ ef.name }}</option>
         {% endfor %}
       </select>
-      <button class="btn btn-dark ms-auto" onclick="window.print()">Imprimir</button>
+      <button id="orderDirBtn" class="btn btn-outline-secondary" type="button" title="Orden ascendente" aria-label="Cambiar orden">↑↓</button>
+      <div class="ms-auto d-flex gap-2">
+        <button class="btn btn-secondary" type="button" onclick="handleDownloadIndividual()">Descargar</button>
+        <button class="btn btn-dark" type="button" onclick="prepareSignaturesAndPrint()">Imprimir</button>
+      </div>
     </div>
 
     <div class="table-responsive">
       <table class="table table-bordered align-middle" id="tabla">
         <thead class="table-light">
           <tr>
+            <th style="width:60px">#</th>
             <th>Nombre</th>
             <th>Correo</th>
             <th>Nivel de desempeño</th>
             {% for ef in extra_fields %}
               <th>{{ ef.name }}</th>
             {% endfor %}
-            <th>Firma</th>
+            <th class="single-signature">Firma</th>
           </tr>
         </thead>
         <tbody>
@@ -134,18 +294,22 @@
             {% with peruser=extra_values_by_user|get_item:ins.user.id %}
             <tr
               data-nombre="{{ ins.user.get_full_name|default:ins.user.username|lower }}"
+              data-correo="{{ ins.user.email|default:''|lower }}"
+              data-numero="{{ forloop.counter }}"
+              data-apellidos="{{ ins.user.last_name|default:''|lower }}"
               data-nivel="{{ ins.performance_level.name|default:''|lower }}"
               {% for ef in extra_fields %}
                 data-extra{{ ef.id }}="{{ peruser|get_item:ef.id|default:''|lower }}"
               {% endfor %}
             >
-              <td>{{ ins.user.get_full_name|default:ins.user.username }}</td>
+              <td class="text-center">{{ forloop.counter }}</td>
+              <td>{% if ins.user.last_name %}{{ ins.user.last_name }} {{ ins.user.first_name }}{% else %}{{ ins.user.get_full_name|default:ins.user.username }}{% endif %}</td>
               <td>{{ ins.user.email|default:"—" }}</td>
               <td>{{ ins.performance_level.name|default:"—" }}</td>
               {% for ef in extra_fields %}
                 <td>{{ peruser|get_item:ef.id|default:"—" }}</td>
               {% endfor %}
-              <td style="width:160px"></td>
+              <td class="signature-cell single-signature" style="width:160px"></td>
             </tr>
             {% endwith %}
           {% endfor %}
@@ -157,19 +321,120 @@
       (function(){
         const select = document.getElementById('orderBy');
         const tbody = document.querySelector('#tabla tbody');
+        let ascending = true;
+        const orderBtn = document.getElementById('orderDirBtn');
         function sortBy(key){
           const rows = Array.from(tbody.querySelectorAll('tr'));
           rows.sort((a,b)=>{
             const av = (a.dataset[key]||'').toString();
             const bv = (b.dataset[key]||'').toString();
-            return av.localeCompare(bv, 'es', {sensitivity:'base', numeric:true});
+            const cmp = av.localeCompare(bv, 'es', {sensitivity:'base', numeric:true});
+            return ascending ? cmp : -cmp;
           });
           rows.forEach(r=>tbody.appendChild(r));
         }
         select.addEventListener('change', ()=> sortBy(select.value));
+        orderBtn.addEventListener('click', ()=>{
+          ascending = !ascending;
+          orderBtn.title = ascending ? 'Orden ascendente' : 'Orden descendente';
+          orderBtn.textContent = ascending ? '↑↓' : '↓↑';
+          sortBy(select.value);
+        });
         sortBy(select.value);
       })();
     </script>
   {% endif %}
+
+  <script>
+    function handleDownloadIndividual(){
+      downloadXlsxIndividualMeta({
+        fileBaseName: 'participantes_concurso_individual_' + ('{{ concurso.title|escapejs }}'),
+        resumenMeta: {
+          congresoName: '{{ congreso.name|escapejs }}',
+          concursoTitle: '{{ concurso.title|escapejs }}',
+          instructorName: '{% if concurso.instructor %}{{ concurso.instructor.get_full_name|default:concurso.instructor.username|escapejs }}{% else %}—{% endif %}',
+          lugarText: '{% if concurso.lugar %}{{ concurso.lugar|escapejs }}{% else %}—{% endif %}',
+          tipo: 'Individual'
+        },
+        tableSelector: '#tabla'
+      });
+    }
+    function handleDownloadGrupal(){
+      downloadXlsxGrupalMeta({
+        fileBaseName: 'participantes_concurso_grupal_' + ('{{ concurso.title|escapejs }}'),
+        resumenMeta: {
+          congresoName: '{{ congreso.name|escapejs }}',
+          concursoTitle: '{{ concurso.title|escapejs }}',
+          instructorName: '{% if concurso.instructor %}{{ concurso.instructor.get_full_name|default:concurso.instructor.username|escapejs }}{% else %}—{% endif %}',
+          lugarText: '{% if concurso.lugar %}{{ concurso.lugar|escapejs }}{% else %}—{% endif %}',
+          tipo: 'Grupal'
+        },
+        tablesSelector: 'table.team-table, #tablaOrphans'
+      });
+    }
+  </script>
+  <script>
+    function prepareSignaturesAndPrint(){
+      try{
+        // 1) ¿Cuántos días?
+        const countStr = prompt('¿En cuántos días se va a desarrollar el concurso?', '1');
+        if(countStr === null) return;
+        const count = Math.max(0, parseInt(countStr||'0', 10));
+        const labels = [];
+        for(let i=1;i<=count;i++){
+          const v = prompt(`Ingresa título para la firma/fecha del día ${i}`, 'Firma');
+          if(v === null) return; // si cancela en medio, aborta
+          labels.push((v||'').trim());
+        }
+
+        // 2) Preparar todas las tablas (equipos, sin equipo, individual)
+        const tables = document.querySelectorAll('table.team-table, #tablaOrphans, #tabla');
+
+        // Ocultamos la firma simple solo durante la impresión
+        const singleHeaders = document.querySelectorAll('th.single-signature');
+        const singleCells = document.querySelectorAll('td.single-signature');
+        singleHeaders.forEach(h=>h.classList.add('hide-print'));
+        singleCells.forEach(td=>td.classList.add('hide-print'));
+
+        // Inyectar columnas dinámicas con los labels y celdas vacías por fila
+        tables.forEach(table=>{
+          const theadRow = table.querySelector('thead tr');
+          const injectedHeads = [];
+          labels.forEach((label, idx)=>{
+            const th = document.createElement('th');
+            th.className = 'sig-col print-inject';
+            th.textContent = label || `Firma ${idx+1} Fecha`;
+            theadRow.appendChild(th);
+            injectedHeads.push(th);
+          });
+
+          const rows = table.querySelectorAll('tbody tr');
+          rows.forEach(tr=>{
+            labels.forEach(()=>{
+              const td = document.createElement('td');
+              td.className = 'signature-cell sig-col print-inject';
+              // No se rellena contenido; queda vacío para firma/fecha manual
+              tr.appendChild(td);
+            });
+          });
+        });
+
+        // 3) Lanzar impresión
+        window.print();
+
+        // 4) Limpieza: retirar columnas dinámicas y restaurar firma simple
+        document.querySelectorAll('.print-inject').forEach(el=>{
+          el.parentElement && el.parentElement.removeChild(el);
+        });
+        singleHeaders.forEach(h=>h.classList.remove('hide-print'));
+        singleCells.forEach(td=>td.classList.remove('hide-print'));
+
+      }catch(e){
+        console.error(e);
+        window.print();
+      }
+    }
+  </script>
 </body>
 </html>
+ 

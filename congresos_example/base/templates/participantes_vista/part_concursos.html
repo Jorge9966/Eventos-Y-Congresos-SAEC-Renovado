@@ -37,10 +37,23 @@
 </head>
 <body>
   {% include 'partials/participante_topbar.html' %}
+      {# Se elimina el listado de "Mis concursos inscritos" aquí; se mostrará solo en Inicio con despliegue #}
   <header class="hero-cover">
     <h1>CONCURSOS</h1>
   </header>
   <main class="page-wrap">
+    {% if max_concursos_por_participante and inscritos_count_concursos >= max_concursos_por_participante %}
+      <div class="warning-box">Ya alcanzaste el máximo de {{ max_concursos_por_participante }} concursos permitidos en este congreso.</div>
+    {% endif %}
+    {% if max_concursos_por_participante and inscritos_count_concursos < max_concursos_por_participante %}
+      {% with restantes=max_concursos_por_participante|subtract:inscritos_count_concursos %}
+        {% if restantes == 1 %}
+        <div class="warning-box" style="background:#ecfeff;border-color:#67e8f9;color:#0e7490;">Te queda 1 inscripción disponible.</div>
+        {% else %}
+        <div class="warning-box" style="background:#ecfeff;border-color:#67e8f9;color:#0e7490;">Te quedan {{ restantes }} inscripciones disponibles.</div>
+        {% endif %}
+      {% endwith %}
+    {% endif %}
     {% if not approved %}
       <div class="warning-box">Tu membresía aún no está aprobada o fue rechazada. Puedes explorar el catálogo, pero no podrás inscribirte.</div>
     {% endif %}
@@ -74,18 +87,27 @@
                   {# Concursos grupales: mostrar equipos inscritos y capacidad #}
                   {% if c.equipos_inscritos is not None %}
                     {{ c.equipos_inscritos }} equipos{% if c.numero_equipos %} de {{ c.numero_equipos }}{% endif %}
-                    {% if c.max_por_equipo %}<span class="d-block">(máx {{ c.max_por_equipo }} por equipo)</span>{% endif %}
-                  {% else %}
-                    0 equipos
                   {% endif %}
                 {% endif %}
               </div>
               <span class="status-badge">Disponible</span>
             </div>
             <div class="mt-2">
-              <a class="icon-enroll {% if not approved %}disabled{% endif %}" {% if approved %}href="{% url 'part_concurso_inscribir' c.id %}"{% else %}tabindex="-1" aria-disabled="true"{% endif %} aria-label="Ver e inscribirme" title="Ver e inscribirme">
-                <i class="bi bi-box-arrow-in-right"></i>
-              </a>
+              {% with maxv=max_concursos_por_participante cnt=inscritos_count_concursos %}
+                {% if not approved %}
+                  <a class="icon-enroll disabled" tabindex="-1" aria-disabled="true" aria-label="Ver e inscribirme" title="Ver e inscribirme">
+                    <i class="bi bi-box-arrow-in-right"></i>
+                  </a>
+                {% elif maxv and cnt >= maxv %}
+                  <a class="icon-enroll disabled" tabindex="-1" aria-disabled="true" aria-label="Ver e inscribirme" title="Ver e inscribirme">
+                    <i class="bi bi-box-arrow-in-right"></i>
+                  </a>
+                {% else %}
+                  <a class="icon-enroll" href="{% url 'part_concurso_inscribir' c.id %}" aria-label="Ver e inscribirme" title="Ver e inscribirme">
+                    <i class="bi bi-box-arrow-in-right"></i>
+                  </a>
+                {% endif %}
+              {% endwith %}
             </div>
           </article>
           </div>

@@ -41,6 +41,19 @@
     <h1>CONFERENCIAS</h1>
   </header>
   <main class="page-wrap">
+    {% if max_conferencias_por_participante and inscritos_count_conferencias >= max_conferencias_por_participante %}
+      <div class="warning-box">Ya alcanzaste el máximo de {{ max_conferencias_por_participante }} conferencias permitidas en este congreso.</div>
+    {% endif %}
+    {% if max_conferencias_por_participante and inscritos_count_conferencias < max_conferencias_por_participante %}
+      {% with restantes=max_conferencias_por_participante|subtract:inscritos_count_conferencias %}
+        {% if restantes == 1 %}
+        <div class="warning-box" style="background:#ecfeff;border-color:#67e8f9;color:#0e7490;">Te queda 1 inscripción disponible.</div>
+        {% else %}
+        <div class="warning-box" style="background:#ecfeff;border-color:#67e8f9;color:#0e7490;">Te quedan {{ restantes }} inscripciones disponibles.</div>
+        {% endif %}
+      {% endwith %}
+    {% endif %}
+    {# Se elimina el listado de "Mis conferencias inscritas" aquí; se mostrará solo en Inicio con despliegue #}
     {% if not approved %}
       <div class="warning-box">Tu membresía aún no está aprobada o fue rechazada. Puedes explorar el catálogo, pero no podrás inscribirte.</div>
     {% endif %}
@@ -63,18 +76,26 @@
               <div class="work-divider"></div>
               <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <div class="stat">
-                  {% if f.cupo_maximo %}
-                    {{ f.inscritos_count|default:0 }} participantes de {{ f.cupo_maximo }}
-                  {% else %}
-                    {{ f.inscritos_count|default:0 }} participantes
-                  {% endif %}
+                  {{ f.inscritos_count|default:0 }} participantes{% if f.cupo_maximo %} de {{ f.cupo_maximo }}{% endif %}
                 </div>
                 <span class="status-badge">Disponible</span>
               </div>
               <div class="mt-2">
-                <a class="icon-enroll {% if not approved %}disabled{% endif %}" {% if approved %}href="{% url 'part_conferencia_inscribir' f.id %}"{% else %}tabindex="-1" aria-disabled="true"{% endif %} aria-label="Ver e inscribirme" title="Ver e inscribirme">
-                  <i class="bi bi-box-arrow-in-right"></i>
-                </a>
+                {% with maxv=max_conferencias_por_participante cnt=inscritos_count_conferencias %}
+                  {% if not approved %}
+                    <a class="icon-enroll disabled" tabindex="-1" aria-disabled="true" aria-label="Ver e inscribirme" title="Ver e inscribirme">
+                      <i class="bi bi-box-arrow-in-right"></i>
+                    </a>
+                  {% elif maxv and cnt >= maxv %}
+                    <a class="icon-enroll disabled" tabindex="-1" aria-disabled="true" aria-label="Ver e inscribirme" title="Ver e inscribirme">
+                      <i class="bi bi-box-arrow-in-right"></i>
+                    </a>
+                  {% else %}
+                    <a class="icon-enroll" href="{% url 'part_conferencia_inscribir' f.id %}" aria-label="Ver e inscribirme" title="Ver e inscribirme">
+                      <i class="bi bi-box-arrow-in-right"></i>
+                    </a>
+                  {% endif %}
+                {% endwith %}
               </div>
             </article>
           </div>

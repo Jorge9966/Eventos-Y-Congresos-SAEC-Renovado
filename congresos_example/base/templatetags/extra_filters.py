@@ -1,4 +1,26 @@
 from django import template
+
+register = template.Library()
+
+# Ya existen otros filtros en este módulo; añadimos `index` de forma segura.
+
+@register.filter(name="index")
+def index(sequence, position):
+    """
+    Devuelve el elemento en `position` de `sequence`.
+    - Si `sequence` no es indexable o el índice está fuera de rango, devuelve cadena vacía.
+    - Convierte `position` a int si viene como string desde la plantilla.
+    """
+    try:
+        pos = int(position)
+    except (TypeError, ValueError):
+        return ""
+    try:
+        return sequence[pos]
+    except Exception:
+        return ""
+
+from django import template
 import re
 import html as html_lib
 
@@ -64,5 +86,69 @@ def full_name(user):
         last = (getattr(user, "last_name", "") or "").strip()
         combined = f"{first} {last}".strip()
         return combined or (getattr(user, "username", "") or "")
+    except Exception:
+        return ""
+
+
+@register.filter(name="zip_values")
+def zip_values(extra_fields, values):
+    """
+    Zipea `extra_fields` y `values` por posición y devuelve una lista de dicts
+    con llaves `id` y `value` para uso en plantillas.
+
+    Uso: {% for pair in extra_fields|zip_values:row.values_ordered %}
+            data-extra{{ pair.id }}="{{ pair.value }}"
+         {% endfor %}
+    """
+    try:
+        if not extra_fields:
+            return []
+        vals = list(values or [])
+        out = []
+        for i, ef in enumerate(extra_fields):
+            vid = getattr(ef, 'id', None)
+            v = vals[i] if i < len(vals) else ""
+            out.append({"id": vid, "value": v})
+        return out
+    except Exception:
+        return []
+
+# Nuevo filtro: obtener nivel de desempeño del miembro por congreso
+from base.models import UserCongresoMembership
+
+@register.filter(name="performance_level_for")
+def performance_level_for(user, congreso):
+    """
+    Devuelve el nombre del nivel de desempeño para `user` en el `congreso` dado.
+    Acepta `congreso` como objeto o id. Retorna cadena vacía si no existe.
+    Uso en plantilla:
+      {{ ins.user|performance_level_for:congreso }}
+    """
+    try:
+        if not user or not congreso:
+            return ""
+        congreso_id = getattr(congreso, "id", None) or int(congreso)
+        membership = (
+            UserCongresoMembership.objects
+            .select_related("performance_level")
+            .filter(user=user, congreso_id=congreso_id)
+            .order_by("-created_at")
+            .first()
+        )
+        if membership and getattr(membership.performance_level, "name", ""):
+            return membership.performance_level.name
+        return ""
+    except Exception:
+        return ""
+
+# Nuevo filtro aritmético: resta segura de dos valores numéricos
+@register.filter(name="subtract")
+def subtract(a, b):
+    """
+    Resta `b` de `a` como enteros. Si no son convertibles, devuelve cadena vacía.
+    Uso: {{ max_value|subtract:current_count }}
+    """
+    try:
+        return int(a) - int(b)
     except Exception:
         return ""

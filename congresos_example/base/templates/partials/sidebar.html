@@ -19,12 +19,12 @@
     <a href="{% url 'inicio' %}" class="{% if current == 'inicio' %}active{% endif %}"><i class="bi bi-house"></i> <span>Inicio</span></a>
     {% if not is_scoped_admin %}
       <a href="{% url 'congresos_eventos' %}" class="{% if current == 'congresos_eventos' or current == 'congreso_evento' or current == 'editar_congreso_evento' %}active{% endif %}">
-        <i class="bi bi-folder"></i> <span>Congresos o eventos</span>
+        <i class="bi bi-folder"></i> <span>Eventos y Congresos</span>
       </a>
       <div class="section">CONFIGURACIÓN</div>
       <a href="{% url 'correos' %}" class="{% if current == 'correos' %}active{% endif %}"><i class="bi bi-envelope"></i> <span>Correos</span></a>
-      <a href="{% url 'nivel_desempeno' %}" class="{% if current == 'nivel_desempeno' %}active{% endif %}"><i class="bi bi-collection"></i> <span>Nivel de desempeño</span></a>
-      <a href="{% url 'campos' %}" class="{% if current == 'campos' %}active{% endif %}"><i class="bi bi-ui-checks"></i> <span>Campos</span></a>
+      <a href="{% url 'nivel_desempeno' %}" class="{% if current == 'nivel_desempeno' %}active{% endif %}"><i class="bi bi-collection"></i> <span>Rol / Cargo / Semestre</span></a>
+      <a href="{% url 'campos' %}" class="{% if current == 'campos' %}active{% endif %}"><i class="bi bi-ui-checks"></i> <span>Campos Requeridos</span></a>
     {% endif %}
     <div class="section">PERFIL</div>
     <a href="{% url 'perfil' %}" class="{% if current == 'perfil' %}active{% endif %}"><i class="bi bi-person"></i> <span>Perfil</span></a>
@@ -32,6 +32,6 @@
   {% endwith %}
   <div style="margin-top:auto; font-size:0.8rem; color:#aaa;">
     Logeado como: {{ request.user.username }}<br>
-    Sistema de Administración de Congresos o eventos
+    Sistema De Administración De Eventos Y Congresos (SAEC)
   </div>
 </div>

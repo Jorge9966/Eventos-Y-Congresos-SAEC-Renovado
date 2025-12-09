@@ -37,7 +37,7 @@ body.sidebar-collapsed .sidebar{ flex-basis:0; width:0; min-width:0; padding:0; 
 
 	{% with url_name=request.resolver_match.url_name %}
 	<div class="nav-item link-toggle {% if url_name in 'ins_talleres,ins_concursos,ins_conferencias' %}open{% endif %}" data-target="#sb-ins-congreso">
-		<i class="bi bi-folder"></i> <span>Congreso</span> <i class="bi bi-chevron-right chev"></i>
+		<i class="bi bi-folder"></i> <span>Evento y Congreso</span> <i class="bi bi-chevron-right chev"></i>
 	</div>
 	<div id="sb-ins-congreso" class="submenu {% if url_name in 'ins_talleres,ins_concursos,ins_conferencias' %}open{% endif %}">
 		<a class="nav-item {% if url_name == 'ins_talleres' %}active{% endif %}" href="{% url 'ins_talleres' %}">Talleres</a>

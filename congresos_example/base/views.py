@@ -17,6 +17,7 @@ import re
 from datetime import timedelta
 from django.utils import timezone
 from django.db import transaction
+import logging
 from functools import wraps
 from django.utils.text import slugify
 from django.db.models import Q, Count
@@ -38,6 +39,8 @@ from .models import (
     ConcursoEquipo,
     ConcursoEquipoMiembro,
 )
+
+logger = logging.getLogger(__name__)
 
 # -------------------
 # Helpers de acceso por congreso
@@ -266,19 +269,19 @@ def login_view(request):
             # Participantes: permitir login aunque aún no tengan un congreso aprobado.
             # Si hay aprobado, fijar congreso activo; si no, ir al inicio de participante con botones deshabilitados.
             if user.groups.filter(name="Participantes").exists():
-                approved_qs = UserCongresoMembership.objects.filter(user=user, role="participante", status="approved")
+                # Tomar todas las membresías del participante (aprobadas o pendientes)
+                all_memberships = UserCongresoMembership.objects.filter(user=user, role="participante").order_by("-created_at", "-id")
+                approved_qs = all_memberships.filter(status="approved")
                 chosen_id = None
-                if approved_qs.exists():
-                    # Determinar congreso activo (seleccionado aprobado o más reciente)
-                    if selected_congreso:
-                        if not approved_qs.filter(congreso=selected_congreso).exists():
-                            messages.error(request, "Debes iniciar sesión en un congreso donde hayas sido aceptado como participante.")
-                            return render(request, "login.html", {"selected_congreso": selected_congreso})
-                        chosen_id = selected_congreso.id
-                    else:
-                        chosen = approved_qs.order_by("-decided_at", "-id").first()
-                        chosen_id = chosen.congreso_id if chosen else None
-                # Login válido y (opcionalmente) fijar sesión
+                # Si el usuario seleccionó un congreso en la URL o formulario, respetarlo siempre
+                if selected_congreso:
+                    chosen_id = selected_congreso.id
+                else:
+                    # Si no seleccionó, usar la membresía más reciente (pendiente o aprobada)
+                    latest = all_memberships.first()
+                    chosen_id = latest.congreso_id if latest else None
+
+                # Login válido y fijar sesión
                 login(request, user)
                 if chosen_id:
                     request.session["participant_active_congreso_id"] = chosen_id
@@ -333,12 +336,30 @@ def registro_view(request):
                 ).order_by("order", "name")
             )
 
+        # Capturar valores del POST para repoblar el formulario tras error
+        post_values = {
+            "first_name": first_name or "",
+            "apellido_paterno": apellido_paterno or "",
+            "apellido_materno": apellido_materno or "",
+            "email": email or "",
+            "tipo_usuario": tipo_usuario or "",
+            "congreso_password": congreso_password or "",
+            "performance_level_id": performance_level_id or "",
+        }
+
+        # Anexar valor publicado a cada campo extra para uso directo en el template
+        for f in extra_fields:
+            try:
+                f.posted_value = (request.POST.get(f"extra_{f.id}") or "").strip()
+            except Exception:
+                f.posted_value = ""
+
         # Validar formato de correo (username y email deben ser correos válidos)
         try:
             validate_email(email or "")
         except ValidationError:
             messages.error(request, "Ingresa un correo electrónico válido.")
-            return render(request, "register.html", {"selected_congreso": selected_congreso, "levels": levels})
+            return render(request, "register.html", {"selected_congreso": selected_congreso, "levels": levels, "extra_fields": extra_fields, "post_values": post_values})
 
 
 
@@ -352,13 +373,13 @@ def registro_view(request):
             if existing_user_for_email:
                 if UserCongresoMembership.objects.filter(user=existing_user_for_email, congreso=selected_congreso).exists():
                     messages.error(request, "Este correo ya está registrado en este congreso. Inicia sesión para continuar.")
-                    return render(request, "register.html", {"selected_congreso": selected_congreso, "levels": levels})
+                    return render(request, "register.html", {"selected_congreso": selected_congreso, "levels": levels, "extra_fields": extra_fields, "post_values": post_values})
 
         # Validar contraseña de acceso del congreso (si aplica)
         if selected_congreso and selected_congreso.has_access_password():
             if not congreso_password or not selected_congreso.check_access_password(congreso_password):
                 messages.error(request, "La contraseña de acceso del congreso es incorrecta.")
-                return render(request, "register.html", {"selected_congreso": selected_congreso, "levels": levels})
+                return render(request, "register.html", {"selected_congreso": selected_congreso, "levels": levels, "extra_fields": extra_fields, "post_values": post_values})
 
         # Validar dominio permitido por congreso (si hay dominios configurados)
         if selected_congreso:
@@ -369,16 +390,16 @@ def registro_view(request):
                 if not is_allowed:
                     pretty = ", ".join(sorted(dominios))
                     messages.error(request, f"Este correo no pertenece a un dominio permitido para este congreso. Dominios permitidos: {pretty}")
-                    return render(request, "register.html", {"selected_congreso": selected_congreso, "levels": levels})
+                    return render(request, "register.html", {"selected_congreso": selected_congreso, "levels": levels, "extra_fields": extra_fields, "post_values": post_values})
 
         # Validación de política de contraseña: 8-16 caracteres, al menos 1 mayúscula, 1 minúscula y 1 símbolo especial (.!%&$})
         specials = set(".!%&$}")
         if not password or len(password) < 8 or len(password) > 16:
             messages.error(request, "La contraseña debe tener entre 8 y 16 caracteres.")
-            return render(request, "register.html", {"selected_congreso": selected_congreso, "levels": levels})
+            return render(request, "register.html", {"selected_congreso": selected_congreso, "levels": levels, "extra_fields": extra_fields, "post_values": post_values})
         if not any(c.isupper() for c in password) or not any(c.islower() for c in password) or not any(c in specials for c in password):
             messages.error(request, "La contraseña debe contener al menos una letra mayúscula, una letra minúscula y un símbolo especial (.!%&$}).")
-            return render(request, "register.html", {"selected_congreso": selected_congreso, "levels": levels})
+            return render(request, "register.html", {"selected_congreso": selected_congreso, "levels": levels, "extra_fields": extra_fields, "post_values": post_values})
 
         # Validar campos extra antes de crear usuario (solo para el rol elegido)
         extra_values = {}
@@ -391,25 +412,38 @@ def registro_view(request):
             raw_val = (request.POST.get(key) or "").strip()
             if f.required and not raw_val:
                 messages.error(request, f"El campo '{f.name}' es obligatorio.")
-                return render(request, "register.html", {"selected_congreso": selected_congreso, "levels": levels})
+                return render(request, "register.html", {"selected_congreso": selected_congreso, "levels": levels, "extra_fields": extra_fields, "post_values": post_values})
             if raw_val:
                 if f.field_type == "email":
                     try:
                         validate_email(raw_val)
                     except ValidationError:
                         messages.error(request, f"Ingresa un correo válido en el campo '{f.name}'.")
-                        return render(request, "register.html", {"selected_congreso": selected_congreso, "levels": levels})
+                        return render(request, "register.html", {"selected_congreso": selected_congreso, "levels": levels, "extra_fields": extra_fields, "post_values": post_values})
                 elif f.field_type == "number":
                     try:
                         float(raw_val)
                     except ValueError:
                         messages.error(request, f"Ingresa un número válido en el campo '{f.name}'.")
-                        return render(request, "register.html", {"selected_congreso": selected_congreso, "levels": levels})
+                        return render(request, "register.html", {"selected_congreso": selected_congreso, "levels": levels, "extra_fields": extra_fields, "post_values": post_values})
                 elif f.field_type == "select":
                     choices = f.get_choices()
                     if choices and raw_val not in choices:
                         messages.error(request, f"Selecciona una opción válida para '{f.name}'.")
-                        return render(request, "register.html", {"selected_congreso": selected_congreso, "levels": levels})
+                        return render(request, "register.html", {"selected_congreso": selected_congreso, "levels": levels, "extra_fields": extra_fields, "post_values": post_values})
+                # Validación de irrepetible (unique_value) por campo y alcance (global o por congreso)
+                if getattr(f, "unique_value", False):
+                    q = UserExtraFieldValue.objects.filter(field=f, value=raw_val)
+                    # Si el campo está asociado a un congreso específico, restringir por ese alcance
+                    if f.congreso_id:
+                        q = q.filter(congreso_id=f.congreso_id)
+                    else:
+                        # Campo global: si hay selected_congreso, permitir también coincidencias en ese congreso
+                        # pero la unicidad se aplica globalmente (sin congreso)
+                        pass
+                    if q.exists():
+                        messages.error(request, f"El valor ingresado para '{f.name}' ya está en uso y debe ser irrepetible.")
+                        return render(request, "register.html", {"selected_congreso": selected_congreso, "levels": levels, "extra_fields": extra_fields, "post_values": post_values})
                 # boolean y date no requieren validación extra aquí (navegador ayuda)
             extra_values[f.id] = raw_val
 
@@ -425,7 +459,7 @@ def registro_view(request):
             user = authenticate(request, username=existing.username, password=password)
             if not user:
                 messages.error(request, "Ya existe una cuenta con ese correo. Inicia sesión o verifica tu contraseña.")
-                return render(request, "register.html", {"selected_congreso": selected_congreso, "levels": levels})
+                return render(request, "register.html", {"selected_congreso": selected_congreso, "levels": levels, "extra_fields": extra_fields, "post_values": post_values})
             # Actualizar nombre si viene vacío en la cuenta
             if first_name and not user.first_name:
                 user.first_name = first_name
@@ -438,7 +472,7 @@ def registro_view(request):
                 if user.username.lower() != email.lower():
                     if User.objects.exclude(pk=user.pk).filter(username__iexact=email).exists():
                         messages.error(request, "Ese correo ya está en uso por otra cuenta. Inicia sesión con ese correo o usa uno distinto.")
-                        return render(request, "register.html", {"selected_congreso": selected_congreso, "levels": levels})
+                        return render(request, "register.html", {"selected_congreso": selected_congreso, "levels": levels, "extra_fields": extra_fields, "post_values": post_values})
                     user.username = email
                 if user.email.lower() != email.lower():
                     user.email = email
@@ -474,7 +508,7 @@ def registro_view(request):
                     selected_level = None
             if role_value == "participante" and PerformanceLevel.objects.filter(congreso=selected_congreso).exists() and not selected_level:
                 messages.error(request, "Selecciona un nivel de desempeño válido para este congreso.")
-                return render(request, "register.html", {"selected_congreso": selected_congreso, "levels": levels})
+                return render(request, "register.html", {"selected_congreso": selected_congreso, "levels": levels, "extra_fields": extra_fields, "post_values": post_values})
             try:
                 UserCongresoMembership.objects.create(
                     user=user,
@@ -749,29 +783,21 @@ def inicio_participante_view(request):
         messages.error(request, "Esta página es solo para participantes.")
         return redirect("inicio")
 
-    # Tomar la membresía más reciente del usuario como participante para determinar estado.
-    membership = (
-        UserCongresoMembership.objects
-        .filter(user=request.user, role="participante")
-        .order_by("-decided_at", "-id")
-        .first()
-    )
-    congreso = membership.congreso if membership else None
-    status = membership.status if membership else "none"
-    approved = status == "approved"
-    # Etiqueta en español para el estado
-    status_label_map = {
-        "pending": "Pendiente de Activación",
-        "approved": "Aprobado",
-        "rejected": "Rechazado",
-        "none": "",
-    }
-    status_label = status_label_map.get(status, "")
+    # Usar el contexto base que respeta la sesión `participant_active_congreso_id`
+    base_ctx = participante_base_context(request)
+    if base_ctx is None:
+        return redirect("inicio")
+    congreso = base_ctx.get("congreso")
+    membership = base_ctx.get("membership")
+    status = base_ctx.get("membership_status")
+    approved = base_ctx.get("approved")
+    status_label = base_ctx.get("membership_status_label")
 
     # Inscripciones (mostrar solo la primera si hay varias, similar al mockup que lista un recurso)
     taller_insc = None
     concurso_insc = None
     conferencia_insc = None
+    talleres_inscritos = []
     if approved and congreso:
         taller_insc = (
             TallerInscripcion.objects
@@ -780,6 +806,11 @@ def inicio_participante_view(request):
             .order_by("-created_at")
             .first()
         )
+        # Lista completa de talleres inscritos (para mostrar al hacer clic en el título)
+        talleres_inscritos = list(
+            Taller.objects.filter(congreso=congreso, inscripciones__user=request.user)
+            .order_by("created_at")
+        )
         concurso_insc = (
             ConcursoInscripcion.objects
             .filter(user=request.user, congreso=congreso)
@@ -787,12 +818,20 @@ def inicio_participante_view(request):
             .order_by("-created_at")
             .first()
         )
+        concursos_inscritos = list(
+            Concurso.objects.filter(congreso=congreso, inscripciones__user=request.user)
+            .order_by("created_at")
+        )
         conferencia_insc = (
             ConferenciaInscripcion.objects
             .filter(user=request.user, congreso=congreso)
             .select_related("conferencia")
             .order_by("-created_at")
             .first()
+        )
+        conferencias_inscritas = list(
+            Conferencia.objects.filter(congreso=congreso, inscripciones__user=request.user)
+            .order_by("created_at")
         )
 
     # URLs para explorar (se deshabilitan en la plantilla si no aprobado)
@@ -808,8 +847,11 @@ def inicio_participante_view(request):
         "membership_status_label": status_label,
         "approved": approved,
         "taller_insc": taller_insc,
+        "talleres_inscritos": talleres_inscritos,
         "concurso_insc": concurso_insc,
+        "concursos_inscritos": concursos_inscritos,
         "conferencia_insc": conferencia_insc,
+        "conferencias_inscritas": conferencias_inscritas,
         "talleres_url": talleres_url,
         "concursos_url": concursos_url,
         "conferencias_url": conferencias_url,
@@ -828,13 +870,33 @@ def participante_base_context(request):
         messages.error(request, "Esta página es solo para participantes.")
         return None
 
-    membership = (
-        UserCongresoMembership.objects
-        .filter(user=request.user, role="participante")
-        .order_by("-decided_at", "-id")
-        .first()
-    )
-    congreso = membership.congreso if membership else None
+    # Intentar usar el congreso activo elegido en sesión; si no existe, caer al más reciente
+    active_id = request.session.get("participant_active_congreso_id")
+    membership = None
+    congreso = None
+    if active_id:
+        try:
+            congreso = Congreso.objects.get(pk=active_id)
+        except Congreso.DoesNotExist:
+            congreso = None
+        membership = (
+            UserCongresoMembership.objects
+            .filter(user=request.user, role="participante", congreso_id=active_id)
+            .order_by("-decided_at", "-id")
+            .first()
+        )
+        # Si el usuario no está registrado en el congreso activo, bloquear acceso con aviso
+        if congreso and membership is None:
+            messages.warning(request, f"No estás registrado en '{congreso.name}'. Regístrate para acceder.")
+            return None
+    if not congreso:
+        membership = (
+            UserCongresoMembership.objects
+            .filter(user=request.user, role="participante")
+            .order_by("-decided_at", "-id")
+            .first()
+        )
+        congreso = membership.congreso if membership else None
     status = membership.status if membership else "none"
     approved = status == "approved"
     status_label_map = {"pending": "Pendiente de Activación", "approved": "Aprobado", "rejected": "Rechazado", "none": ""}
@@ -860,6 +922,9 @@ def part_talleres_view(request):
         return redirect("inicio")
     congreso = ctx.get("congreso")
     talleres = []
+    # Conteo actual y lista de inscritos por el usuario
+    inscritos_count_talleres = 0
+    talleres_inscritos = []
     if congreso:
         talleres = list(
             Taller.objects
@@ -867,7 +932,17 @@ def part_talleres_view(request):
             .annotate(inscritos_count=Count("inscripciones"))
             .order_by("created_at")
         )
-    ctx.update({"talleres": talleres})
+        talleres_inscritos = list(
+            Taller.objects.filter(congreso=congreso, inscripciones__user=request.user)
+            .order_by("created_at")
+        )
+        inscritos_count_talleres = len(talleres_inscritos)
+    ctx.update({
+        "talleres": talleres,
+        "talleres_inscritos": talleres_inscritos,
+        "inscritos_count_talleres": inscritos_count_talleres,
+        "max_talleres_por_participante": getattr(congreso, "talleres_por_participante", None) if congreso else None,
+    })
     return render(request, "participantes_vista/part_talleres.html", ctx)
 
 
@@ -878,6 +953,8 @@ def part_concursos_view(request):
         return redirect("inicio")
     congreso = ctx.get("congreso")
     concursos = []
+    concursos_inscritos = []
+    inscritos_count_concursos = 0
     if congreso:
         concursos = list(
             Concurso.objects
@@ -898,7 +975,21 @@ def part_concursos_view(request):
                 c.capacidad_total = total if total > 0 else None
                 # Conteo real de equipos inscritos (ConcursoEquipo relacionados)
                 c.equipos_inscritos = c.equipos.count()
-    ctx.update({"concursos": concursos})
+            concursos_inscritos = list(
+                Concurso.objects.filter(congreso=congreso, inscripciones__user=request.user)
+                .order_by("created_at")
+            )
+            inscritos_count_concursos = len(concursos_inscritos)
+            current_concursos_count = ConcursoInscripcion.objects.filter(congreso=congreso, user=request.user).count()
+            max_concursos = getattr(congreso, "concursos_por_participante", None)
+            reached_max_concursos = (max_concursos is not None and current_concursos_count >= max_concursos)
+    ctx.update({
+        "concursos": concursos,
+        "concursos_inscritos": concursos_inscritos,
+        "inscritos_count_concursos": inscritos_count_concursos,
+        "max_concursos_por_participante": getattr(congreso, "concursos_por_participante", None) if congreso else None,
+            "reached_max_concursos": reached_max_concursos,
+    })
     return render(request, "participantes_vista/part_concursos.html", ctx)
 
 
@@ -909,6 +1000,8 @@ def part_conferencias_view(request):
         return redirect("inicio")
     congreso = ctx.get("congreso")
     conferencias = []
+    conferencias_inscritas = []
+    inscritos_count_conferencias = 0
     if congreso:
         conferencias = list(
             Conferencia.objects
@@ -916,7 +1009,17 @@ def part_conferencias_view(request):
             .annotate(inscritos_count=Count("inscripciones"))
             .order_by("created_at")
         )
-    ctx.update({"conferencias": conferencias})
+        conferencias_inscritas = list(
+            Conferencia.objects.filter(congreso=congreso, inscripciones__user=request.user)
+            .order_by("created_at")
+        )
+        inscritos_count_conferencias = len(conferencias_inscritas)
+    ctx.update({
+        "conferencias": conferencias,
+        "conferencias_inscritas": conferencias_inscritas,
+        "inscritos_count_conferencias": inscritos_count_conferencias,
+        "max_conferencias_por_participante": getattr(congreso, "conferencias_por_participante", None) if congreso else None,
+    })
     return render(request, "participantes_vista/part_conferencias.html", ctx)
 
 
@@ -943,10 +1046,13 @@ def part_taller_inscribir_view(request, taller_id: int):
         if TallerInscripcion.objects.filter(congreso=congreso, taller=taller, user=request.user).exists():
             messages.info(request, "Ya estás inscrito en este taller.")
             return redirect("part_taller_inscribir", taller_id=taller.id)
-        # Verificar si está inscrito en otro taller (solo uno permitido por categoría)
-        if TallerInscripcion.objects.filter(congreso=congreso, user=request.user).exclude(taller=taller).exists():
-            messages.error(request, "Solo puedes estar inscrito en un taller a la vez.")
-            return redirect("part_taller_inscribir", taller_id=taller.id)
+        # Máximo de talleres por participante según congreso (si está configurado)
+        max_talleres = getattr(congreso, "talleres_por_participante", None)
+        if max_talleres is not None:
+            current_count = TallerInscripcion.objects.filter(congreso=congreso, user=request.user).count()
+            if current_count >= max_talleres:
+                messages.error(request, f"Ya alcanzaste el máximo de {max_talleres} talleres permitidos en este congreso.")
+                return redirect("part_taller_inscribir", taller_id=taller.id)
         capacidad_tmp = taller.cupo_maximo if taller.cupo_maximo else None
         inscritos_tmp = taller.inscripciones.count()
         if capacidad_tmp is not None and inscritos_tmp >= capacidad_tmp:
@@ -970,15 +1076,17 @@ def part_taller_inscribir_view(request, taller_id: int):
     otro_taller_inscrito = False
     if not ya_inscrito:
         otro_taller_inscrito = TallerInscripcion.objects.filter(congreso=congreso, user=request.user).exclude(taller=taller).exists()
-    # calcular anterior/siguiente por fecha de creacion (lista mostrada es -created_at)
+    # Calcular anterior/siguiente igual que el orden del listado (order_by("created_at") asc)
+    # Anterior: el inmediatamente menor a created_at (desc para tomar el más cercano)
     prev_taller = (
-        Taller.objects.filter(congreso=congreso, created_at__gt=taller.created_at)
-        .order_by("created_at")
-        .first()
-    )
-    next_taller = (
         Taller.objects.filter(congreso=congreso, created_at__lt=taller.created_at)
         .order_by("-created_at")
+        .first()
+    )
+    # Siguiente: el inmediatamente mayor a created_at (asc para tomar el más cercano)
+    next_taller = (
+        Taller.objects.filter(congreso=congreso, created_at__gt=taller.created_at)
+        .order_by("created_at")
         .first()
     )
     ctx.update({
@@ -989,6 +1097,9 @@ def part_taller_inscribir_view(request, taller_id: int):
         "otro_taller_inscrito": otro_taller_inscrito,
         "prev_taller": prev_taller,
         "next_taller": next_taller,
+        # Exponer máximo configurado para la plantilla (None significa sin límite)
+        "max_talleres_por_participante": getattr(congreso, "talleres_por_participante", None),
+        "inscritos_count_talleres": TallerInscripcion.objects.filter(congreso=congreso, user=request.user).count(),
     })
     # Datos completos de participantes (nombre, correo, nivel y campos extra dinámicos)
     extra_fields = []
@@ -1015,6 +1126,12 @@ def part_taller_inscribir_view(request, taller_id: int):
         for v in values_qs:
             d = extra_values_by_user.setdefault(v["user_id"], {})
             d[v["field_id"]] = v["value"]
+        # Mapa de nivel de desempeño por usuario desde membresía si la inscripción no lo tiene
+        level_by_user = {}
+        memb_qs = UserCongresoMembership.objects.filter(congreso=congreso, user_id__in=user_ids, role="participante").select_related("performance_level")
+        for m in memb_qs:
+            if m.performance_level:
+                level_by_user[m.user_id] = m.performance_level.name
         # Talleres no manejan equipos; lógica grupal eliminada.
 
         for ins in inscripciones:
@@ -1048,9 +1165,13 @@ def part_concurso_inscribir_view(request, concurso_id: int):
         if ConcursoInscripcion.objects.filter(congreso=congreso, concurso=concurso, user=request.user).exists():
             messages.info(request, "Ya estás inscrito en este concurso.")
             return redirect("part_concurso_inscribir", concurso_id=concurso.id)
-        if ConcursoInscripcion.objects.filter(congreso=congreso, user=request.user).exclude(concurso=concurso).exists():
-            messages.error(request, "Solo puedes estar inscrito en un concurso a la vez.")
-            return redirect("part_concurso_inscribir", concurso_id=concurso.id)
+        # Máximo de concursos por participante según congreso (si está configurado)
+        max_concursos = getattr(congreso, "concursos_por_participante", None)
+        if max_concursos is not None:
+            current_count = ConcursoInscripcion.objects.filter(congreso=congreso, user=request.user).count()
+            if current_count >= max_concursos:
+                messages.error(request, f"Ya alcanzaste el máximo de {max_concursos} concursos permitidos en este congreso.")
+                return redirect("part_concurso_inscribir", concurso_id=concurso.id)
         # Validación obligatoria de equipo completo para concursos grupales
         if concurso.type == "grupal":
             max_equipo = concurso.max_por_equipo or 0
@@ -1085,11 +1206,19 @@ def part_concurso_inscribir_view(request, concurso_id: int):
             if len(aprobados_ids) != len(miembros_ids):
                 messages.error(request, "Alguno de los integrantes seleccionados no está aprobado en este congreso.")
                 return redirect("part_concurso_inscribir", concurso_id=concurso.id)
-            # Verificar que ninguno esté inscrito ya en este u otro concurso
-            already_other = ConcursoInscripcion.objects.filter(congreso=congreso, user_id__in=miembros_ids).exclude(concurso=concurso)
-            if already_other.exists():
-                messages.error(request, "Alguno de los integrantes ya está inscrito en otro concurso.")
-                return redirect("part_concurso_inscribir", concurso_id=concurso.id)
+            # Validar máximos por participante: permitir que estén en otros concursos si no han llegado al tope
+            max_concursos = getattr(congreso, "concursos_por_participante", None)
+            if max_concursos is not None:
+                # Obtener conteos por usuario
+                counts_by_user = {
+                    uid: ConcursoInscripcion.objects.filter(congreso=congreso, user_id=uid).count()
+                    for uid in miembros_ids
+                }
+                excedidos = [uid for uid, cnt in counts_by_user.items() if cnt >= max_concursos]
+                if excedidos:
+                    messages.error(request, "Alguno de los integrantes alcanzó su máximo de concursos en este congreso.")
+                    return redirect("part_concurso_inscribir", concurso_id=concurso.id)
+            # Duplicados en el mismo concurso: evitar
             already_this = ConcursoInscripcion.objects.filter(congreso=congreso, concurso=concurso, user_id__in=miembros_ids)
             if already_this.exists():
                 messages.error(request, "Alguno de los integrantes ya está inscrito en este concurso.")
@@ -1169,14 +1298,15 @@ def part_concurso_inscribir_view(request, concurso_id: int):
     otro_concurso_inscrito = False
     if not ya_inscrito:
         otro_concurso_inscrito = ConcursoInscripcion.objects.filter(congreso=congreso, user=request.user).exclude(concurso=concurso).exists()
+    # Anterior/Siguiente según listado de concursos (order_by("created_at") asc)
     prev_concurso = (
-        Concurso.objects.filter(congreso=congreso, created_at__gt=concurso.created_at)
-        .order_by("created_at")
+        Concurso.objects.filter(congreso=congreso, created_at__lt=concurso.created_at)
+        .order_by("-created_at")
         .first()
     )
     next_concurso = (
-        Concurso.objects.filter(congreso=congreso, created_at__lt=concurso.created_at)
-        .order_by("-created_at")
+        Concurso.objects.filter(congreso=congreso, created_at__gt=concurso.created_at)
+        .order_by("created_at")
         .first()
     )
     # Datos para formulario de equipos (UI)
@@ -1191,21 +1321,16 @@ def part_concurso_inscribir_view(request, concurso_id: int):
         miembros_qs = UserCongresoMembership.objects.filter(
             congreso=congreso, role="participante", status="approved"
         ).exclude(user=request.user)
-        # Excluir quienes ya están inscritos en este concurso o en otros concursos del mismo congreso
+        # Excluir solo quienes ya están en ESTE concurso (inscritos o en equipo de este concurso)
         inscritos_este_ids = set(
             ConcursoInscripcion.objects.filter(congreso=congreso, concurso=concurso)
-            .values_list("user_id", flat=True)
-        )
-        inscritos_otro_ids = set(
-            ConcursoInscripcion.objects.filter(congreso=congreso)
-            .exclude(concurso=concurso)
             .values_list("user_id", flat=True)
         )
         en_equipo_este_ids = set(
             ConcursoEquipoMiembro.objects.filter(equipo__concurso=concurso)
             .values_list("user_id", flat=True)
         )
-        excluir_ids = inscritos_este_ids.union(inscritos_otro_ids).union(en_equipo_este_ids)
+        excluir_ids = inscritos_este_ids.union(en_equipo_este_ids)
         if excluir_ids:
             miembros_qs = miembros_qs.exclude(user_id__in=list(excluir_ids))
         miembros = (
@@ -1213,7 +1338,13 @@ def part_concurso_inscribir_view(request, concurso_id: int):
             .select_related("user")
             .order_by("user__first_name", "user__last_name", "user__username")
         )
+        # Respetar el máximo por participante: excluir quienes ya alcanzaron su tope de concursos en este congreso
+        max_concursos = getattr(congreso, "concursos_por_participante", None)
         for m in miembros:
+            if max_concursos is not None:
+                count_m = ConcursoInscripcion.objects.filter(congreso=congreso, user_id=m.user_id).count()
+                if count_m >= max_concursos:
+                    continue
             nombre = (m.user.get_full_name() or m.user.username or m.user.email or m.user.username)
             correo = m.user.email or "sin-correo"
             equipo_participantes.append({"id": m.user_id, "name": nombre, "email": correo, "display": f"{nombre} ({correo})"})
@@ -1223,6 +1354,8 @@ def part_concurso_inscribir_view(request, concurso_id: int):
     extra_fields = []
     participantes_rows = []
     team_by_user = {}
+    # Mapa de nivel de desempeño por usuario (desde membresía del congreso)
+    level_by_user = {}
     if congreso:
         from .models import ExtraField, UserExtraFieldValue
         inscripciones = list(concurso.inscripciones.select_related("user", "performance_level"))
@@ -1236,6 +1369,17 @@ def part_concurso_inscribir_view(request, concurso_id: int):
         )
         user_ids = [ins.user_id for ins in inscripciones] or [0]
         field_ids = [f.id for f in extra_fields] or [0]
+        # Cargar niveles desde la membresía del congreso como respaldo cuando la inscripción no lo tenga
+        try:
+            memberships = (
+                UserCongresoMembership.objects.filter(congreso=congreso, user_id__in=user_ids)
+                .select_related("performance_level", "user")
+            )
+            for m in memberships:
+                level_by_user[m.user_id] = m.performance_level.name if m.performance_level else None
+        except Exception:
+            # En caso de que el modelo no esté disponible por import circular o similar
+            level_by_user = {}
         values_qs = UserExtraFieldValue.objects.filter(
             (Q(congreso=congreso) | Q(congreso__isnull=True)),
             user_id__in=user_ids,
@@ -1266,12 +1410,14 @@ def part_concurso_inscribir_view(request, concurso_id: int):
                     continue
                 seen_users.add(m.user_id)
                 ordered = [extra_values_by_user.get(ins.user_id, {}).get(f.id, "") for f in extra_fields]
-                rows.append({"ins": ins, "values_ordered": ordered})
+                level_name = ins.performance_level.name if ins.performance_level else level_by_user.get(ins.user_id, None)
+                rows.append({"ins": ins, "values_ordered": ordered, "level_name": level_name})
             teams_rows.append({"equipo": eq, "rows": rows})
         for ins in inscripciones:
             if ins.user_id not in seen_users:
                 ordered = [extra_values_by_user.get(ins.user_id, {}).get(f.id, "") for f in extra_fields]
-                orphan_rows.append({"ins": ins, "values_ordered": ordered})
+                level_name = ins.performance_level.name if ins.performance_level else level_by_user.get(ins.user_id, None)
+                orphan_rows.append({"ins": ins, "values_ordered": ordered, "level_name": level_name})
 
     ctx.update({
         "concurso": concurso,
@@ -1282,6 +1428,9 @@ def part_concurso_inscribir_view(request, concurso_id: int):
         "equipos_inscritos": equipos_inscritos,
         "prev_concurso": prev_concurso,
         "next_concurso": next_concurso,
+        # Exponer máximo configurado para plantilla
+        "max_concursos_por_participante": getattr(congreso, "concursos_por_participante", None),
+        "inscritos_count_concursos": ConcursoInscripcion.objects.filter(congreso=congreso, user=request.user).count(),
         # Equipo UI
         "equipo_participantes": equipo_participantes,
         "max_integrantes_equipo": max_integrantes_equipo,
@@ -1305,7 +1454,8 @@ def part_concurso_inscribir_view(request, concurso_id: int):
             team_by_user[m.user_id] = m.equipo.nombre if m.equipo and m.equipo.nombre else ""
     for ins in inscripciones:
         ordered = [extra_values_by_user.get(ins.user_id, {}).get(f.id, "") for f in extra_fields]
-        row = {"ins": ins, "values_ordered": ordered}
+        level_name = ins.performance_level.name if ins.performance_level else level_by_user.get(ins.user_id, None)
+        row = {"ins": ins, "values_ordered": ordered, "level_name": level_name}
         if concurso.type == "grupal":
             row["team_name"] = team_by_user.get(ins.user_id, "")
         participantes_rows.append(row)
@@ -1337,9 +1487,13 @@ def part_conferencia_inscribir_view(request, conferencia_id: int):
         if ConferenciaInscripcion.objects.filter(congreso=congreso, conferencia=conferencia, user=request.user).exists():
             messages.info(request, "Ya estás inscrito en esta conferencia.")
             return redirect("part_conferencia_inscribir", conferencia_id=conferencia.id)
-        if ConferenciaInscripcion.objects.filter(congreso=congreso, user=request.user).exclude(conferencia=conferencia).exists():
-            messages.error(request, "Solo puedes estar inscrito en una conferencia a la vez.")
-            return redirect("part_conferencia_inscribir", conferencia_id=conferencia.id)
+        # Máximo de conferencias por participante según congreso (si está configurado)
+        max_conferencias = getattr(congreso, "conferencias_por_participante", None)
+        if max_conferencias is not None:
+            current_count = ConferenciaInscripcion.objects.filter(congreso=congreso, user=request.user).count()
+            if current_count >= max_conferencias:
+                messages.error(request, f"Ya alcanzaste el máximo de {max_conferencias} conferencias permitidas en este congreso.")
+                return redirect("part_conferencia_inscribir", conferencia_id=conferencia.id)
         capacidad_tmp = conferencia.cupo_maximo if conferencia.cupo_maximo else None
         inscritos_tmp = conferencia.inscripciones.count()
         if capacidad_tmp is not None and inscritos_tmp >= capacidad_tmp:
@@ -1362,14 +1516,15 @@ def part_conferencia_inscribir_view(request, conferencia_id: int):
     otra_conferencia_inscrita = False
     if not ya_inscrito:
         otra_conferencia_inscrita = ConferenciaInscripcion.objects.filter(congreso=congreso, user=request.user).exclude(conferencia=conferencia).exists()
+    # Anterior/Siguiente según listado de conferencias (order_by("created_at") asc)
     prev_conferencia = (
-        Conferencia.objects.filter(congreso=congreso, created_at__gt=conferencia.created_at)
-        .order_by("created_at")
+        Conferencia.objects.filter(congreso=congreso, created_at__lt=conferencia.created_at)
+        .order_by("-created_at")
         .first()
     )
     next_conferencia = (
-        Conferencia.objects.filter(congreso=congreso, created_at__lt=conferencia.created_at)
-        .order_by("-created_at")
+        Conferencia.objects.filter(congreso=congreso, created_at__gt=conferencia.created_at)
+        .order_by("created_at")
         .first()
     )
     ctx.update({
@@ -1380,6 +1535,9 @@ def part_conferencia_inscribir_view(request, conferencia_id: int):
         "otra_conferencia_inscrita": otra_conferencia_inscrita,
         "prev_conferencia": prev_conferencia,
         "next_conferencia": next_conferencia,
+        # Exponer máximo configurado para plantilla
+        "max_conferencias_por_participante": getattr(congreso, "conferencias_por_participante", None),
+        "inscritos_count_conferencias": ConferenciaInscripcion.objects.filter(congreso=congreso, user=request.user).count(),
     })
     # Datos completos de participantes (nombre, correo, nivel y campos extra dinámicos)
     extra_fields = []
@@ -1443,7 +1601,7 @@ def part_perfil_view(request):
     membership: UserCongresoMembership | None = ctx.get("membership")
     congreso = ctx.get("congreso")
 
-    # Campos extra para sección PERFIL (rol participante + globales/congreso)
+    # Campos extra para perfil (incluye los creados en 'perfil' y también los de 'registro')
     perfil_extra_fields = []
     if congreso:
         perfil_extra_fields = list(
@@ -1452,6 +1610,18 @@ def part_perfil_view(request):
             .filter(role_scope__in=["both", "participante"])  # visibles para participante
             .order_by("order", "name")
         )
+        # Incluir también los de la sección 'registro' para que puedan editarse desde el perfil
+        registro_fields = list(
+            ExtraField.objects.filter(active=True, section="registro")
+            .filter(Q(congreso=congreso) | Q(congreso__isnull=True))
+            .filter(role_scope__in=["both", "participante"])  # visibles para participante
+            .order_by("order", "name")
+        )
+        # Unir evitando duplicados por id
+        by_id = {f.id: f for f in perfil_extra_fields}
+        for f in registro_fields:
+            if f.id not in by_id:
+                perfil_extra_fields.append(f)
 
     # Valores actuales de esos campos para el usuario
     extra_values_map: dict[int, str] = {}
@@ -1500,31 +1670,31 @@ def part_perfil_view(request):
                     membership.performance_level = pl
                 except PerformanceLevel.DoesNotExist:
                     pass
-            membership.save()
-            user.save()
-            # Otros campos extra dinámicos
+            # Guardar campos extra dinámicos dentro del mismo formulario (excepto apellidos)
             for f in perfil_extra_fields:
                 if f.code in ["apellido_paterno", "apellido_materno"]:
-                    continue  # ya manejados
+                    continue
                 field_name = f"extra_{f.id}"
-                raw_val = request.POST.get(field_name, "").strip()
+                raw_val = (request.POST.get(field_name, "") or "").strip()
                 if f.field_type == "boolean":
                     raw_val = "1" if request.POST.get(field_name) else "0"
+                # Validar unicidad si aplica
+                if getattr(f, "unique_value", False) and raw_val:
+                    q = UserExtraFieldValue.objects.filter(field=f, value=raw_val)
+                    if f.congreso_id:
+                        q = q.filter(congreso=congreso)
+                    else:
+                        q = q.filter(congreso__isnull=True)
+                    q = q.exclude(user=user)
+                    if q.exists():
+                        messages.error(request, f"El valor '{raw_val}' ya está en uso para '{f.name}'. Debe ser único.")
+                        return redirect("part_perfil")
                 if raw_val or not f.required:
-                    # Validar unicidad si aplica
-                    if getattr(f, "unique_value", False) and raw_val:
-                        q = UserExtraFieldValue.objects.filter(field=f, value=raw_val)
-                        if f.congreso_id:
-                            q = q.filter(congreso=congreso)
-                        else:
-                            q = q.filter(congreso__isnull=True)
-                        q = q.exclude(user=user)
-                        if q.exists():
-                            messages.error(request, f"El valor '{raw_val}' ya está en uso para '{f.name}'. Debe ser único.")
-                            return redirect("part_perfil")
                     uev, _ = UserExtraFieldValue.objects.get_or_create(user=user, congreso=congreso if f.congreso_id else None, field=f)
                     uev.value = raw_val
                     uev.save()
+            membership.save()
+            user.save()
             messages.success(request, "Datos públicos actualizados.")
             return redirect("part_perfil")
         elif action == "change_user" and membership and membership.status == "approved":
@@ -1573,6 +1743,21 @@ def part_perfil_view(request):
                 messages.success(request, "Contraseña actualizada correctamente.")
                 return redirect("part_perfil")
 
+    # Fallback de apellidos desde last_name si no existen en extra fields
+    def _split_last_name(last_name: str) -> tuple[str, str]:
+        ln = (last_name or "").strip()
+        if not ln:
+            return "", ""
+        parts = ln.split()
+        if len(parts) == 1:
+            return parts[0], ""
+        return parts[0], " ".join(parts[1:])
+
+    ap_pa_ctx = extra_values_map.get(next((f.id for f in perfil_extra_fields if f.code == "apellido_paterno"), None), "")
+    ap_ma_ctx = extra_values_map.get(next((f.id for f in perfil_extra_fields if f.code == "apellido_materno"), None), "")
+    if (not ap_pa_ctx) and (not ap_ma_ctx) and user.last_name:
+        ap_pa_ctx, ap_ma_ctx = _split_last_name(user.last_name)
+
     ctx.update({
         "perfil_extra_fields": perfil_extra_fields,
         "extra_values_map": extra_values_map,
@@ -1581,6 +1766,9 @@ def part_perfil_view(request):
         # IDs de campos apellido si existen para precargar
         "apellido_paterno_field_id": next((f.id for f in perfil_extra_fields if f.code == "apellido_paterno"), None),
         "apellido_materno_field_id": next((f.id for f in perfil_extra_fields if f.code == "apellido_materno"), None),
+        # Valores directos (con fallback desde last_name)
+        "apellido_paterno_value": ap_pa_ctx,
+        "apellido_materno_value": ap_ma_ctx,
     })
     return render(request, "participantes_vista/part_perfil.html", ctx)
 
@@ -2475,7 +2663,7 @@ def instructor_concurso_participantes_view(request):
             # Agregar
             for uid in to_add:
                 ConcursoEquipoMiembro.objects.create(equipo=equipo, user_id=uid)
-                if not ConcursoInscripcion.objects.filter(concurso=concurso, concurso_id=concurso.id, user_id=uid).exists():
+                if not ConcursoInscripcion.objects.filter(concurso=concurso, user_id=uid).exists():
                     mem = UserCongresoMembership.objects.filter(congreso=congreso, user_id=uid, role="participante").select_related("performance_level").first()
                     ConcursoInscripcion.objects.create(congreso=congreso, concurso=concurso, user_id=uid, performance_level=mem.performance_level if mem else None)
             # Remover
@@ -2676,6 +2864,10 @@ def usuario_participante_nuevo_view(request, congreso_id: int):
 
     if request.method == "POST":
         first_name = (request.POST.get("first_name") or "").strip()
+        apellido_paterno = (request.POST.get("apellido_paterno") or "").strip()
+        apellido_materno = (request.POST.get("apellido_materno") or "").strip()
+        apellido_paterno = (request.POST.get("apellido_paterno") or "").strip()
+        apellido_materno = (request.POST.get("apellido_materno") or "").strip()
         apellido_paterno = (request.POST.get("apellido_paterno") or "").strip()
         apellido_materno = (request.POST.get("apellido_materno") or "").strip()
         email = (request.POST.get("email") or "").strip()
@@ -3048,6 +3240,13 @@ def usuario_editar_participante_view(request, congreso_id: int, membership_id: i
                     # actualizar usuario
                     user = membership.user
                     user.first_name = first_name or user.first_name
+                    if apellido_paterno or apellido_materno:
+                        combined_last = f"{apellido_paterno} {apellido_materno}".strip()
+                        user.last_name = combined_last or user.last_name
+                    # actualizar apellidos combinados en last_name
+                    if apellido_paterno or apellido_materno:
+                        combined_last = f"{apellido_paterno} {apellido_materno}".strip()
+                        user.last_name = combined_last or user.last_name
                     # username = email
                     if email and (user.username.lower() != email.lower()):
                         if not User.objects.exclude(pk=user.pk).filter(username__iexact=email).exists():
@@ -3099,7 +3298,15 @@ def usuario_editar_participante_view(request, congreso_id: int, membership_id: i
 
     grupos = request.user.groups.values_list("name", flat=True)
     rol = "Administrador" if (request.user.is_superuser or "Administrador" in grupos) else ("Instructor" if "Instructores" in grupos else "Participante")
-    ctx = {"rol": rol, "congreso": congreso, "membership": membership, "levels": levels, "extra_fields": extra_fields, "extra_values": extra_values}
+    # Prefill apellidos separados desde last_name (si viene junto)
+    ln = (membership.user.last_name or "").strip()
+    ap_paterno = ""
+    ap_materno = ""
+    if ln:
+        parts = ln.split()
+        ap_paterno = parts[0]
+        ap_materno = " ".join(parts[1:]) if len(parts) > 1 else ""
+    ctx = {"rol": rol, "congreso": congreso, "membership": membership, "levels": levels, "extra_fields": extra_fields, "extra_values": extra_values, "ap_paterno": ap_paterno, "ap_materno": ap_materno}
     return render(request, "usuarios_accion/editar_participante.html", ctx)
 
 
@@ -3179,7 +3386,14 @@ def usuario_editar_instructores_view(request, congreso_id: int, membership_id: i
 
     grupos = request.user.groups.values_list("name", flat=True)
     rol = "Administrador" if (request.user.is_superuser or "Administrador" in grupos) else ("Instructor" if "Instructores" in grupos else "Participante")
-    ctx = {"rol": rol, "congreso": congreso, "membership": membership, "extra_fields": extra_fields, "extra_values": extra_values}
+    ln = (membership.user.last_name or "").strip()
+    ap_paterno = ""
+    ap_materno = ""
+    if ln:
+        parts = ln.split()
+        ap_paterno = parts[0]
+        ap_materno = " ".join(parts[1:]) if len(parts) > 1 else ""
+    ctx = {"rol": rol, "congreso": congreso, "membership": membership, "extra_fields": extra_fields, "extra_values": extra_values, "ap_paterno": ap_paterno, "ap_materno": ap_materno}
     return render(request, "usuarios_accion/editar_participantes.html", ctx)
 
 
@@ -3212,7 +3426,18 @@ def congresos_eventos_view(request):
         if action == "delete_congreso":
             cid = request.POST.get("congreso_id")
             if cid:
-                Congreso.objects.filter(id=cid).delete()
+                # Eliminar administrador de congreso (usuario) si existe, y luego borrar el congreso
+                cg = Congreso.objects.filter(id=cid).first()
+                if cg:
+                    admin = cg.admin_user
+                    # Borrar primero el usuario administrador para evitar conflictos al recrearlo
+                    if admin:
+                        try:
+                            admin.delete()
+                        except Exception:
+                            # Si falla, continuar igualmente con la eliminación del congreso
+                            pass
+                    cg.delete()
                 messages.success(request, "Congreso eliminado.")
             return HttpResponseRedirect(reverse("congresos_eventos"))
 
@@ -3257,6 +3482,10 @@ def congreso_evento_view(request):
         password = request.POST.get("password") or ""
         logo_file = request.FILES.get("logo")
         access_password = (request.POST.get("access_password") or "").strip()
+        # Cantidades por participante (opcionales)
+        raw_talleres = (request.POST.get("talleres_por_participante") or "").strip()
+        raw_conferencias = (request.POST.get("conferencias_por_participante") or "").strip()
+        raw_concursos = (request.POST.get("concursos_por_participante") or "").strip()
 
         # Validaciones
         has_error = False
@@ -3298,6 +3527,18 @@ def congreso_evento_view(request):
             # Establecer contraseña de acceso si viene
             if access_password:
                 congreso.set_access_password(access_password)
+            # Parsear cantidades (vacío = sin restricción)
+            def _parse_pos_int(raw):
+                if not raw:
+                    return None
+                try:
+                    val = int(raw)
+                    return val if val >= 0 else None
+                except ValueError:
+                    return None
+            congreso.talleres_por_participante = _parse_pos_int(raw_talleres)
+            congreso.conferencias_por_participante = _parse_pos_int(raw_conferencias)
+            congreso.concursos_por_participante = _parse_pos_int(raw_concursos)
             congreso.save()
 
             scope_user = None
@@ -3369,6 +3610,10 @@ def editar_congreso_evento_view(request, congreso_id: int):
         logo_file = request.FILES.get("logo")
         access_password = (request.POST.get("access_password") or "").strip()
         clear_access_password = request.POST.get("clear_access_password") == "on"
+        # Cantidades por participante (opcionales)
+        raw_talleres = (request.POST.get("talleres_por_participante") or "").strip()
+        raw_conferencias = (request.POST.get("conferencias_por_participante") or "").strip()
+        raw_concursos = (request.POST.get("concursos_por_participante") or "").strip()
 
         has_error = False
         if not nombre_congreso:
@@ -3491,6 +3736,18 @@ def editar_congreso_evento_view(request, congreso_id: int):
                 congreso.set_access_password(None)
             elif access_password:
                 congreso.set_access_password(access_password)
+            # Actualizar cantidades (vacío = sin restricción)
+            def _parse_pos_int(raw):
+                if not raw:
+                    return None
+                try:
+                    val = int(raw)
+                    return val if val >= 0 else None
+                except ValueError:
+                    return None
+            congreso.talleres_por_participante = _parse_pos_int(raw_talleres)
+            congreso.conferencias_por_participante = _parse_pos_int(raw_conferencias)
+            congreso.concursos_por_participante = _parse_pos_int(raw_concursos)
             congreso.save()
             messages.success(request, "Congreso o evento actualizado correctamente.")
             return redirect("congresos_eventos")
@@ -4347,7 +4604,7 @@ def export_talleres_excel_view(request, congreso_id: int):
             if i == 6:  # Descripcion
                 ws.column_dimensions[col_letter].width = 30
                 for cell in col:
-                    cell.alignment = Alignment(wrap_text=True, vertical="top")
+                    cell.alignment = Alignment(wrap_text=True, shrink_to_fit=True, vertical="top")
             else:
                 max_len = 0
                 for cell in col:
@@ -4357,21 +4614,38 @@ def export_talleres_excel_view(request, congreso_id: int):
                 ws.column_dimensions[col_letter].width = min(max_len + 2, 50)
         # Encabezados en negrita y bordes
         thin = Side(style="thin", color="000000")
+        medium = Side(style="medium", color="000000")
         border = Border(left=thin, right=thin, top=thin, bottom=thin)
         for cell in ws[1]:
             cell.font = Font(bold=True)
             cell.border = border
+            cell.alignment = Alignment(wrap_text=True, shrink_to_fit=True, vertical="center")
         # Altura de filas para mostrar ~3 líneas y añadir comentario con el texto completo
         for r in range(2, ws.max_row + 1):
             ws.row_dimensions[r].height = 45
             for c in range(1, ws.max_column + 1):
-                ws.cell(row=r, column=c).border = border
+                dc2 = ws.cell(row=r, column=c)
+                dc2.border = border
+                dc2.alignment = Alignment(wrap_text=True, shrink_to_fit=True, vertical="top")
             dc = ws.cell(row=r, column=6)
             if dc.value:
                 try:
                     dc.comment = Comment(text=str(dc.value), author="")
                 except Exception:
                     pass
+        # Borde externo medio alrededor del rango usado
+        top_row, bottom_row = 1, ws.max_row
+        left_col, right_col = 1, ws.max_column
+        for c in range(left_col, right_col + 1):
+            cell_top = ws.cell(row=top_row, column=c)
+            cell_top.border = Border(top=medium, left=cell_top.border.left, right=cell_top.border.right, bottom=cell_top.border.bottom)
+            cell_bottom = ws.cell(row=bottom_row, column=c)
+            cell_bottom.border = Border(bottom=medium, left=cell_bottom.border.left, right=cell_bottom.border.right, top=cell_bottom.border.top)
+        for r in range(top_row, bottom_row + 1):
+            cell_left = ws.cell(row=r, column=left_col)
+            cell_left.border = Border(left=medium, top=cell_left.border.top, right=cell_left.border.right, bottom=cell_left.border.bottom)
+            cell_right = ws.cell(row=r, column=right_col)
+            cell_right.border = Border(right=medium, top=cell_right.border.top, left=cell_right.border.left, bottom=cell_right.border.bottom)
         response = HttpResponse(
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
@@ -4496,7 +4770,7 @@ def export_conferencias_excel_view(request, congreso_id: int):
             if i == 6:  # Descripcion
                 ws.column_dimensions[col_letter].width = 30
                 for cell in col:
-                    cell.alignment = Alignment(wrap_text=True, vertical="top")
+                    cell.alignment = Alignment(wrap_text=True, shrink_to_fit=True, vertical="top")
             else:
                 max_len = 0
                 for cell in col:
@@ -4505,20 +4779,37 @@ def export_conferencias_excel_view(request, congreso_id: int):
                         max_len = len(val)
                 ws.column_dimensions[col_letter].width = min(max_len + 2, 50)
         thin = Side(style="thin", color="000000")
+        medium = Side(style="medium", color="000000")
         border = Border(left=thin, right=thin, top=thin, bottom=thin)
         for cell in ws[1]:
             cell.font = Font(bold=True)
             cell.border = border
+            cell.alignment = Alignment(wrap_text=True, shrink_to_fit=True, vertical="center")
         for r in range(2, ws.max_row + 1):
             ws.row_dimensions[r].height = 45
             for c in range(1, ws.max_column + 1):
-                ws.cell(row=r, column=c).border = border
+                dc2 = ws.cell(row=r, column=c)
+                dc2.border = border
+                dc2.alignment = Alignment(wrap_text=True, shrink_to_fit=True, vertical="top")
             dc = ws.cell(row=r, column=6)
             if dc.value:
                 try:
                     dc.comment = Comment(text=str(dc.value), author="")
                 except Exception:
                     pass
+        # Borde externo medio alrededor del rango usado
+        top_row, bottom_row = 1, ws.max_row
+        left_col, right_col = 1, ws.max_column
+        for c in range(left_col, right_col + 1):
+            cell_top = ws.cell(row=top_row, column=c)
+            cell_top.border = Border(top=medium, left=cell_top.border.left, right=cell_top.border.right, bottom=cell_top.border.bottom)
+            cell_bottom = ws.cell(row=bottom_row, column=c)
+            cell_bottom.border = Border(bottom=medium, left=cell_bottom.border.left, right=cell_bottom.border.right, top=cell_bottom.border.top)
+        for r in range(top_row, bottom_row + 1):
+            cell_left = ws.cell(row=r, column=left_col)
+            cell_left.border = Border(left=medium, top=cell_left.border.top, right=cell_left.border.right, bottom=cell_left.border.bottom)
+            cell_right = ws.cell(row=r, column=right_col)
+            cell_right.border = Border(right=medium, top=cell_right.border.top, left=cell_right.border.left, bottom=cell_right.border.bottom)
         response = HttpResponse(
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
@@ -4655,7 +4946,7 @@ def export_concursos_excel_view(request, congreso_id: int):
             if i == 6:  # Descripcion
                 ws.column_dimensions[col_letter].width = 30
                 for cell in col:
-                    cell.alignment = Alignment(wrap_text=True, vertical="top")
+                    cell.alignment = Alignment(wrap_text=True, shrink_to_fit=True, vertical="top")
             else:
                 max_len = 0
                 for cell in col:
@@ -4664,20 +4955,37 @@ def export_concursos_excel_view(request, congreso_id: int):
                         max_len = len(val)
                 ws.column_dimensions[col_letter].width = min(max_len + 2, 50)
         thin = Side(style="thin", color="000000")
+        medium = Side(style="medium", color="000000")
         border = Border(left=thin, right=thin, top=thin, bottom=thin)
         for cell in ws[1]:
             cell.font = Font(bold=True)
             cell.border = border
+            cell.alignment = Alignment(wrap_text=True, shrink_to_fit=True, vertical="center")
         for r in range(2, ws.max_row + 1):
             ws.row_dimensions[r].height = 45
             for c in range(1, ws.max_column + 1):
-                ws.cell(row=r, column=c).border = border
+                dc2 = ws.cell(row=r, column=c)
+                dc2.border = border
+                dc2.alignment = Alignment(wrap_text=True, shrink_to_fit=True, vertical="top")
             dc = ws.cell(row=r, column=6)
             if dc.value:
                 try:
                     dc.comment = Comment(text=str(dc.value), author="")
                 except Exception:
                     pass
+        # Borde externo medio alrededor del rango usado
+        top_row, bottom_row = 1, ws.max_row
+        left_col, right_col = 1, ws.max_column
+        for c in range(left_col, right_col + 1):
+            cell_top = ws.cell(row=top_row, column=c)
+            cell_top.border = Border(top=medium, left=cell_top.border.left, right=cell_top.border.right, bottom=cell_top.border.bottom)
+            cell_bottom = ws.cell(row=bottom_row, column=c)
+            cell_bottom.border = Border(bottom=medium, left=cell_bottom.border.left, right=cell_bottom.border.right, top=cell_bottom.border.top)
+        for r in range(top_row, bottom_row + 1):
+            cell_left = ws.cell(row=r, column=left_col)
+            cell_left.border = Border(left=medium, top=cell_left.border.top, right=cell_left.border.right, bottom=cell_left.border.bottom)
+            cell_right = ws.cell(row=r, column=right_col)
+            cell_right.border = Border(right=medium, top=cell_right.border.top, left=cell_right.border.left, bottom=cell_right.border.bottom)
         response = HttpResponse(
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
@@ -4797,7 +5105,7 @@ def export_taller_excel_view(request, congreso_id: int, taller_id: int):
             if i == 6:
                 ws.column_dimensions[col_letter].width = 30
                 for cell in col:
-                    cell.alignment = Alignment(wrap_text=True, vertical="top")
+                    cell.alignment = Alignment(wrap_text=True, shrink_to_fit=True, vertical="top")
             else:
                 max_len = 0
                 for cell in col:
@@ -4806,20 +5114,37 @@ def export_taller_excel_view(request, congreso_id: int, taller_id: int):
                         max_len = len(val)
                 ws.column_dimensions[col_letter].width = min(max_len + 2, 50)
         thin = Side(style="thin", color="000000")
+        medium = Side(style="medium", color="000000")
         border = Border(left=thin, right=thin, top=thin, bottom=thin)
         for cell in ws[1]:
             cell.font = Font(bold=True)
             cell.border = border
+            cell.alignment = Alignment(wrap_text=True, shrink_to_fit=True, vertical="center")
         for r in range(2, ws.max_row + 1):
             ws.row_dimensions[r].height = 45
             for c in range(1, ws.max_column + 1):
-                ws.cell(row=r, column=c).border = border
+                dc2 = ws.cell(row=r, column=c)
+                dc2.border = border
+                dc2.alignment = Alignment(wrap_text=True, shrink_to_fit=True, vertical="top")
             dc = ws.cell(row=r, column=6)
             if dc.value:
                 try:
                     dc.comment = Comment(text=str(dc.value), author="")
                 except Exception:
                     pass
+        # Borde externo medio alrededor del rango usado
+        top_row, bottom_row = 1, ws.max_row
+        left_col, right_col = 1, ws.max_column
+        for c in range(left_col, right_col + 1):
+            cell_top = ws.cell(row=top_row, column=c)
+            cell_top.border = Border(top=medium, left=cell_top.border.left, right=cell_top.border.right, bottom=cell_top.border.bottom)
+            cell_bottom = ws.cell(row=bottom_row, column=c)
+            cell_bottom.border = Border(bottom=medium, left=cell_bottom.border.left, right=cell_bottom.border.right, top=cell_bottom.border.top)
+        for r in range(top_row, bottom_row + 1):
+            cell_left = ws.cell(row=r, column=left_col)
+            cell_left.border = Border(left=medium, top=cell_left.border.top, right=cell_left.border.right, bottom=cell_left.border.bottom)
+            cell_right = ws.cell(row=r, column=right_col)
+            cell_right.border = Border(right=medium, top=cell_right.border.top, left=cell_right.border.left, bottom=cell_right.border.bottom)
         response = HttpResponse(
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
@@ -4929,7 +5254,7 @@ def export_conferencia_excel_view(request, congreso_id: int, conferencia_id: int
             if i == 6:
                 ws.column_dimensions[col_letter].width = 30
                 for cell in col:
-                    cell.alignment = Alignment(wrap_text=True, vertical="top")
+                    cell.alignment = Alignment(wrap_text=True, shrink_to_fit=True, vertical="top")
             else:
                 max_len = 0
                 for cell in col:
@@ -4938,20 +5263,37 @@ def export_conferencia_excel_view(request, congreso_id: int, conferencia_id: int
                         max_len = len(val)
                 ws.column_dimensions[col_letter].width = min(max_len + 2, 50)
         thin = Side(style="thin", color="000000")
+        medium = Side(style="medium", color="000000")
         border = Border(left=thin, right=thin, top=thin, bottom=thin)
         for cell in ws[1]:
             cell.font = Font(bold=True)
             cell.border = border
+            cell.alignment = Alignment(wrap_text=True, shrink_to_fit=True, vertical="center")
         for r in range(2, ws.max_row + 1):
             ws.row_dimensions[r].height = 45
             for c in range(1, ws.max_column + 1):
-                ws.cell(row=r, column=c).border = border
+                dc2 = ws.cell(row=r, column=c)
+                dc2.border = border
+                dc2.alignment = Alignment(wrap_text=True, shrink_to_fit=True, vertical="top")
             dc = ws.cell(row=r, column=6)
             if dc.value:
                 try:
                     dc.comment = Comment(text=str(dc.value), author="")
                 except Exception:
                     pass
+        # Borde externo medio alrededor del rango usado
+        top_row, bottom_row = 1, ws.max_row
+        left_col, right_col = 1, ws.max_column
+        for c in range(left_col, right_col + 1):
+            cell_top = ws.cell(row=top_row, column=c)
+            cell_top.border = Border(top=medium, left=cell_top.border.left, right=cell_top.border.right, bottom=cell_top.border.bottom)
+            cell_bottom = ws.cell(row=bottom_row, column=c)
+            cell_bottom.border = Border(bottom=medium, left=cell_bottom.border.left, right=cell_bottom.border.right, top=cell_bottom.border.top)
+        for r in range(top_row, bottom_row + 1):
+            cell_left = ws.cell(row=r, column=left_col)
+            cell_left.border = Border(left=medium, top=cell_left.border.top, right=cell_left.border.right, bottom=cell_left.border.bottom)
+            cell_right = ws.cell(row=r, column=right_col)
+            cell_right.border = Border(right=medium, top=cell_right.border.top, left=cell_right.border.left, bottom=cell_right.border.bottom)
         response = HttpResponse(
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
@@ -5228,6 +5570,7 @@ def export_instructores_excel_view(request, congreso_id: int):
 
     try:
         from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Font, Border, Side
         wb = Workbook()
         ws = wb.active
         ws.title = "Instructores"
@@ -5263,7 +5606,10 @@ def export_instructores_excel_view(request, congreso_id: int):
                 conc_ids,
                 conc_titles,
             ])
-        # Auto ancho
+        # Auto ancho + compactar texto y bordes
+        thin = Side(style="thin", color="000000")
+        medium = Side(style="medium", color="000000")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
         for col in ws.columns:
             max_len = 0
             col_letter = col[0].column_letter
@@ -5271,7 +5617,25 @@ def export_instructores_excel_view(request, congreso_id: int):
                 val = str(cell.value) if cell.value is not None else ""
                 if len(val) > max_len:
                     max_len = len(val)
+                cell.alignment = Alignment(wrap_text=True, shrink_to_fit=True, vertical="top")
+                cell.border = border
             ws.column_dimensions[col_letter].width = min(max_len + 2, 50)
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+            cell.alignment = Alignment(wrap_text=True, shrink_to_fit=True, vertical="center")
+        # Borde externo medio
+        top_row, bottom_row = 1, ws.max_row
+        left_col, right_col = 1, ws.max_column
+        for c in range(left_col, right_col + 1):
+            cell_top = ws.cell(row=top_row, column=c)
+            cell_top.border = Border(top=medium, left=cell_top.border.left, right=cell_top.border.right, bottom=cell_top.border.bottom)
+            cell_bottom = ws.cell(row=bottom_row, column=c)
+            cell_bottom.border = Border(bottom=medium, left=cell_bottom.border.left, right=cell_bottom.border.right, top=cell_bottom.border.top)
+        for r in range(top_row, bottom_row + 1):
+            cell_left = ws.cell(row=r, column=left_col)
+            cell_left.border = Border(left=medium, top=cell_left.border.top, right=cell_left.border.right, bottom=cell_left.border.bottom)
+            cell_right = ws.cell(row=r, column=right_col)
+            cell_right.border = Border(right=medium, top=cell_right.border.top, left=cell_right.border.left, bottom=cell_right.border.bottom)
         response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         response["Content-Disposition"] = "attachment; filename=Instructores.xlsx"
         wb.save(response)
@@ -5414,6 +5778,7 @@ def export_participantes_excel_view(request, congreso_id: int):
 
     try:
         from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Font, Border, Side
         wb = Workbook()
         ws = wb.active
         ws.title = "Participantes"
@@ -5446,6 +5811,10 @@ def export_participantes_excel_view(request, congreso_id: int):
                 "; ".join(_normalize(cu[1]) for cu in conc),
                 "; ".join(_normalize(e) for e in equipos),
             ])
+        # Compactar texto y aplicar bordes
+        thin = Side(style="thin", color="000000")
+        medium = Side(style="medium", color="000000")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
         for col in ws.columns:
             max_len = 0
             col_letter = col[0].column_letter
@@ -5453,7 +5822,25 @@ def export_participantes_excel_view(request, congreso_id: int):
                 val = str(cell.value) if cell.value is not None else ""
                 if len(val) > max_len:
                     max_len = len(val)
+                cell.alignment = Alignment(wrap_text=True, shrink_to_fit=True, vertical="top")
+                cell.border = border
             ws.column_dimensions[col_letter].width = min(max_len + 2, 50)
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+            cell.alignment = Alignment(wrap_text=True, shrink_to_fit=True, vertical="center")
+        # Borde externo medio
+        top_row, bottom_row = 1, ws.max_row
+        left_col, right_col = 1, ws.max_column
+        for c in range(left_col, right_col + 1):
+            cell_top = ws.cell(row=top_row, column=c)
+            cell_top.border = Border(top=medium, left=cell_top.border.left, right=cell_top.border.right, bottom=cell_top.border.bottom)
+            cell_bottom = ws.cell(row=bottom_row, column=c)
+            cell_bottom.border = Border(bottom=medium, left=cell_bottom.border.left, right=cell_bottom.border.right, top=cell_bottom.border.top)
+        for r in range(top_row, bottom_row + 1):
+            cell_left = ws.cell(row=r, column=left_col)
+            cell_left.border = Border(left=medium, top=cell_left.border.top, right=cell_left.border.right, bottom=cell_left.border.bottom)
+            cell_right = ws.cell(row=r, column=right_col)
+            cell_right.border = Border(right=medium, top=cell_right.border.top, left=cell_right.border.left, bottom=cell_right.border.bottom)
         response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         response["Content-Disposition"] = "attachment; filename=Participantes.xlsx"
         wb.save(response)
@@ -6347,12 +6734,40 @@ def taller_participantes_view(request, congreso_id: int, taller_id: int):
         messages.error(request, "El taller solicitado no existe en este congreso.")
         return redirect("talleres_list", congreso.id)
 
-    # Acciones: quitar inscripción
-    if request.method == "POST" and request.POST.get("action") == "remove" and request.POST.get("insc_id"):
-        insc_id = request.POST.get("insc_id")
-        TallerInscripcion.objects.filter(id=insc_id, taller=taller).delete()
-        messages.success(request, "Participante removido del taller.")
-        return redirect("taller_participantes", congreso.id, taller.id)
+    # Acciones admin: quitar inscripción o inscribir participante
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "remove" and request.POST.get("insc_id"):
+            insc_id = request.POST.get("insc_id")
+            TallerInscripcion.objects.filter(id=insc_id, taller=taller).delete()
+            messages.success(request, "Participante removido del taller.")
+            return redirect("taller_participantes", congreso.id, taller.id)
+        elif action == "add" and request.POST.get("membership_id"):
+            mem_id = request.POST.get("membership_id")
+            try:
+                mem = UserCongresoMembership.objects.select_related("user", "performance_level").get(id=mem_id, congreso=congreso, role="participante", status="approved")
+            except UserCongresoMembership.DoesNotExist:
+                messages.error(request, "Membresía inválida o no aprobada.")
+                return redirect("taller_participantes", congreso.id, taller.id)
+            # Evitar duplicados
+            if TallerInscripcion.objects.filter(congreso=congreso, taller=taller, user_id=mem.user_id).exists():
+                messages.warning(request, "Este participante ya está inscrito en el taller.")
+                return redirect("taller_participantes", congreso.id, taller.id)
+            # Respetar máximos personales si aplica (si hay límite en congreso)
+            max_por_part = congreso.talleres_por_participante or 0
+            if max_por_part:
+                current_count = TallerInscripcion.objects.filter(congreso=congreso, user_id=mem.user_id).count()
+                if current_count >= max_por_part:
+                    messages.error(request, "Este participante ya alcanzó su máximo de talleres.")
+                    return redirect("taller_participantes", congreso.id, taller.id)
+            TallerInscripcion.objects.create(
+                congreso=congreso,
+                taller=taller,
+                user_id=mem.user_id,
+                performance_level=mem.performance_level,
+            )
+            messages.success(request, "Participante inscrito en el taller.")
+            return redirect("taller_participantes", congreso.id, taller.id)
 
     inscripciones = (
         TallerInscripcion.objects
@@ -6377,7 +6792,6 @@ def taller_participantes_view(request, congreso_id: int, taller_id: int):
         d[v.field_id] = v.value
 
     # Mapping de membresía por usuario (para botón editar participante)
-    from .models import UserCongresoMembership
     memberships_qs = UserCongresoMembership.objects.filter(
         congreso=congreso,
         role="participante",
@@ -6392,6 +6806,22 @@ def taller_participantes_view(request, congreso_id: int, taller_id: int):
         or request.user.is_superuser
     )
 
+    # Elegibles: participantes aprobados del congreso no inscritos en este taller
+    base_qs = UserCongresoMembership.objects.filter(congreso=congreso, role="participante", status="approved").select_related("user")
+    ya_ids = set(TallerInscripcion.objects.filter(congreso=congreso, taller=taller).values_list("user_id", flat=True))
+    eligibles_qs = base_qs.exclude(user_id__in=list(ya_ids)).order_by("user__first_name", "user__last_name", "user__username")
+    max_por_part = congreso.talleres_por_participante or 0
+    eligibles = []
+    for m in eligibles_qs:
+        if max_por_part:
+            current_count = TallerInscripcion.objects.filter(congreso=congreso, user_id=m.user_id).count()
+            if current_count >= max_por_part:
+                continue
+        eligibles.append({
+            "id": m.id,
+            "display": f"{(m.user.get_full_name() or m.user.username)} ({m.user.email or 'sin-correo'})"
+        })
+
     ctx = {
         "congreso": congreso,
         "taller": taller,
@@ -6399,6 +6829,7 @@ def taller_participantes_view(request, congreso_id: int, taller_id: int):
         "extra_fields": extra_fields,
         "extra_values_by_user": extra_values_by_user,
         "membership_by_user": membership_by_user,
+        "eligibles": eligibles,
         "is_admin": is_admin,
     }
     grupos = request.user.groups.values_list("name", flat=True)
@@ -6429,9 +6860,37 @@ def concurso_participantes_view(request, congreso_id: int, concurso_id: int):
         messages.error(request, "El concurso solicitado no existe en este congreso.")
         return redirect("concursos_list", congreso.id)
 
-    # Acciones POST: quitar participante, eliminar equipo completo o editar equipo
+    # Acciones POST: inscribir/quitar participante, eliminar equipo completo, editar equipo, agregar integrante
     if request.method == "POST":
         action = request.POST.get("action")
+        # Inscribir participante en concurso individual
+        if action == "add" and concurso.type == "individual" and request.POST.get("membership_id"):
+            mem_id = request.POST.get("membership_id")
+            try:
+                mem = UserCongresoMembership.objects.select_related("user", "performance_level").get(id=mem_id, congreso=congreso, role="participante", status="approved")
+            except UserCongresoMembership.DoesNotExist:
+                messages.error(request, "Membresía inválida o no aprobada.")
+                return redirect("concurso_participantes", congreso.id, concurso.id)
+            # Duplicado en este concurso
+            if ConcursoInscripcion.objects.filter(congreso=congreso, concurso=concurso, user_id=mem.user_id).exists():
+                messages.warning(request, "Este participante ya está inscrito en el concurso.")
+                return redirect("concurso_participantes", congreso.id, concurso.id)
+            # Permitir inscripción en múltiples concursos mientras no supere su máximo por participante
+            # Máximo por participante (congreso)
+            max_por_part = congreso.concursos_por_participante or 0
+            if max_por_part:
+                current_count = ConcursoInscripcion.objects.filter(congreso=congreso, user_id=mem.user_id).count()
+                if current_count >= max_por_part:
+                    messages.error(request, "Este participante ya alcanzó su máximo de concursos.")
+                    return redirect("concurso_participantes", congreso.id, concurso.id)
+            ConcursoInscripcion.objects.create(
+                congreso=congreso,
+                concurso=concurso,
+                user_id=mem.user_id,
+                performance_level=mem.performance_level,
+            )
+            messages.success(request, "Participante inscrito en el concurso.", extra_tags="concurso")
+            return redirect("concurso_participantes", congreso.id, concurso.id)
         if action == "remove" and request.POST.get("insc_id"):
             insc_id = request.POST.get("insc_id")
             try:
@@ -6452,6 +6911,56 @@ def concurso_participantes_view(request, congreso_id: int, concurso_id: int):
             except ConcursoInscripcion.DoesNotExist:
                 messages.error(request, "La inscripción no existe.")
             return redirect("concurso_participantes", congreso.id, concurso.id)
+        elif action == "create_team" and concurso.type == "grupal":
+            team_name = (request.POST.get("team_name") or "").strip()
+            if not team_name:
+                messages.error(request, "Debes proporcionar un nombre de equipo.")
+                return redirect("concurso_participantes", congreso.id, concurso.id)
+            max_eq = concurso.max_por_equipo or 0
+            # Recolectar integrantes propuestos
+            desired_ids: list[int] = []
+            leader_id = request.POST.get("team_member_1")
+            if not leader_id:
+                messages.error(request, "Debes seleccionar un líder para el equipo.")
+                return redirect("concurso_participantes", congreso.id, concurso.id)
+            desired_ids.append(int(leader_id))
+            for slot in range(2, (concurso.max_por_equipo or 0) + 1):
+                v = (request.POST.get(f"team_member_{slot}") or "").strip()
+                if v:
+                    desired_ids.append(int(v))
+            # Unicidad y límites
+            if len(set(desired_ids)) != len(desired_ids):
+                messages.error(request, "Los integrantes seleccionados deben ser únicos.")
+                return redirect("concurso_participantes", congreso.id, concurso.id)
+            if max_eq and len(desired_ids) > max_eq:
+                messages.error(request, "Se supera el máximo de integrantes por equipo.")
+                return redirect("concurso_participantes", congreso.id, concurso.id)
+            # Validaciones por participante
+            for uid in desired_ids:
+                # No debe pertenecer a otro equipo de este concurso
+                if ConcursoEquipoMiembro.objects.filter(equipo__concurso=concurso, user_id=uid).exists():
+                    messages.error(request, "Algún integrante ya está en otro equipo de este concurso.")
+                    return redirect("concurso_participantes", congreso.id, concurso.id)
+                # Máximo por participante: aplica solo si aún no está inscrito en este concurso
+                max_por_part = congreso.concursos_por_participante or 0
+                if max_por_part and not ConcursoInscripcion.objects.filter(concurso=concurso, user_id=uid).exists():
+                    current_count = ConcursoInscripcion.objects.filter(congreso=congreso, user_id=uid).count()
+                    if current_count >= max_por_part:
+                        messages.error(request, "Algún integrante ya alcanzó su máximo de concursos.")
+                        return redirect("concurso_participantes", congreso.id, concurso.id)
+            # Crear equipo y miembros
+            try:
+                equipo = ConcursoEquipo.objects.create(congreso=congreso, concurso=concurso, nombre=team_name, lider_id=int(leader_id))
+            except Exception:
+                messages.error(request, "No se pudo crear el equipo (¿nombre duplicado?).")
+                return redirect("concurso_participantes", congreso.id, concurso.id)
+            for uid in desired_ids:
+                ConcursoEquipoMiembro.objects.create(equipo=equipo, user_id=uid)
+                if not ConcursoInscripcion.objects.filter(concurso=concurso, user_id=uid).exists():
+                    mem = UserCongresoMembership.objects.filter(congreso=congreso, user_id=uid, role="participante").select_related("performance_level").first()
+                    ConcursoInscripcion.objects.create(congreso=congreso, concurso=concurso, user_id=uid, performance_level=mem.performance_level if mem else None)
+            messages.success(request, "Equipo creado correctamente.", extra_tags="concurso")
+            return redirect("concurso_participantes", congreso.id, concurso.id)
         elif action == "remove_team" and request.POST.get("team_id"):
             team_id = request.POST.get("team_id")
             try:
@@ -6466,17 +6975,19 @@ def concurso_participantes_view(request, congreso_id: int, concurso_id: int):
             return redirect("concurso_participantes", congreso.id, concurso.id)
         elif action == "edit_team" and request.POST.get("team_id"):
             team_id = request.POST.get("team_id")
+            # Depuración: registrar que se recibió la petición de edición
+            logger.info("Received edit_team POST for team_id=%s by user=%s", team_id, request.user.id if request.user.is_authenticated else None)
             team_name = (request.POST.get("team_name") or "").strip()
             try:
                 equipo = ConcursoEquipo.objects.get(pk=team_id, concurso=concurso)
             except ConcursoEquipo.DoesNotExist:
-                messages.error(request, "El equipo no existe.")
+                messages.error(request, "El equipo no existe.", extra_tags="concurso")
                 return redirect("concurso_participantes", congreso.id, concurso.id)
             max_eq = concurso.max_por_equipo or 0
             desired_ids: list[str] = []
             new_leader = (request.POST.get("team_member_1") or str(equipo.lider_id)).strip()
             if not new_leader:
-                messages.error(request, "Debes seleccionar un líder para el equipo.")
+                messages.error(request, "Debes seleccionar un líder para el equipo.", extra_tags="concurso")
                 return redirect("concurso_participantes", congreso.id, concurso.id)
             desired_ids.append(new_leader)
             for slot in range(2, max_eq + 1):
@@ -6484,25 +6995,22 @@ def concurso_participantes_view(request, congreso_id: int, concurso_id: int):
                 if v:
                     desired_ids.append(v)
             if len(set(desired_ids)) != len(desired_ids):
-                messages.error(request, "Los integrantes seleccionados deben ser únicos.")
+                messages.error(request, "Los integrantes seleccionados deben ser únicos.", extra_tags="concurso")
                 return redirect("concurso_participantes", congreso.id, concurso.id)
             if max_eq and len(desired_ids) > max_eq:
-                messages.error(request, "Se supera el máximo de integrantes por equipo.")
+                messages.error(request, "Se supera el máximo de integrantes por equipo.", extra_tags="concurso")
                 return redirect("concurso_participantes", congreso.id, concurso.id)
-            conflict_other = ConcursoInscripcion.objects.filter(congreso=congreso, user_id__in=desired_ids).exclude(concurso=concurso)
-            if conflict_other.exists():
-                messages.error(request, "Alguno de los integrantes ya está inscrito en otro concurso.")
-                return redirect("concurso_participantes", congreso.id, concurso.id)
+            # Se permite estar inscrito en otros concursos del mismo congreso, respetando el máximo por participante
             conflict_team = ConcursoEquipoMiembro.objects.filter(equipo__concurso=concurso, user_id__in=desired_ids).exclude(equipo=equipo)
             if conflict_team.exists():
-                messages.error(request, "Alguno de los integrantes ya está en otro equipo de este concurso.")
+                messages.error(request, "Alguno de los integrantes ya está en otro equipo de este concurso.", extra_tags="concurso")
                 return redirect("concurso_participantes", congreso.id, concurso.id)
             if team_name and team_name != equipo.nombre:
                 equipo.nombre = team_name
                 try:
                     equipo.save()
                 except Exception:
-                    messages.error(request, "No se pudo actualizar el nombre del equipo (¿duplicado?).")
+                    messages.error(request, "No se pudo actualizar el nombre del equipo (¿duplicado?).", extra_tags="concurso")
                     return redirect("concurso_participantes", congreso.id, concurso.id)
             # Actualizar líder si cambió
             new_leader_id_int = int(new_leader)
@@ -6511,7 +7019,7 @@ def concurso_participantes_view(request, congreso_id: int, concurso_id: int):
                 try:
                     equipo.save(update_fields=["lider_id"])
                 except Exception:
-                    messages.error(request, "No se pudo actualizar el líder del equipo.")
+                    messages.error(request, "No se pudo actualizar el líder del equipo.", extra_tags="concurso")
                     return redirect("concurso_participantes", congreso.id, concurso.id)
             current_ids = set(equipo.miembros.values_list("user_id", flat=True))
             desired_set = set(map(int, desired_ids))
@@ -6550,7 +7058,6 @@ def concurso_participantes_view(request, congreso_id: int, concurso_id: int):
         d = extra_values_by_user.setdefault(v.user_id, {})
         d[v.field_id] = v.value
 
-    from .models import UserCongresoMembership
     memberships_qs = UserCongresoMembership.objects.filter(
         congreso=congreso,
         role="participante",
@@ -6585,6 +7092,22 @@ def concurso_participantes_view(request, congreso_id: int, concurso_id: int):
         "team_id_by_user": team_id_by_user,
         "is_admin": is_admin,
     }
+    # Elegibles para concurso individual: permitir inscritos en otros concursos si no superan su máximo
+    if concurso.type == "individual":
+        base_qs = UserCongresoMembership.objects.filter(congreso=congreso, role="participante", status="approved").select_related("user")
+        ya_ids = set(ConcursoInscripcion.objects.filter(concurso=concurso).values_list("user_id", flat=True))
+        max_por_part = congreso.concursos_por_participante or 0
+        eligibles = []
+        for m in base_qs.exclude(user_id__in=list(ya_ids)).order_by("user__first_name", "user__last_name", "user__username"):
+            if max_por_part:
+                current_count = ConcursoInscripcion.objects.filter(congreso=congreso, user_id=m.user_id).count()
+                if current_count >= max_por_part:
+                    continue
+            eligibles.append({
+                "id": m.id,
+                "display": f"{(m.user.get_full_name() or m.user.username)} ({m.user.email or 'sin-correo'})"
+            })
+        ctx["eligibles"] = eligibles
     # Agrupar por equipo (admin) cuando sea grupal
     if concurso.type == "grupal":
         ins_by_user = {i.user_id: i for i in inscripciones}
@@ -6612,15 +7135,26 @@ def concurso_participantes_view(request, congreso_id: int, concurso_id: int):
             if ins.user_id not in seen_users:
                 ordered = [extra_values_by_user.get(ins.user_id, {}).get(f.id, "") for f in extra_fields]
                 orphan_rows.append({"ins": ins, "values_ordered": ordered})
-        # Participantes elegibles para agregar a cualquier equipo (excluye ocupados en otros concursos o en otros equipos de este)
+        # Participantes elegibles para agregar a un equipo:
+        # - Aprobados
+        # - No deben estar ya en algún equipo de este concurso (permitimos huérfanos)
+        # - Se permite que estén en otros concursos, respetando el máximo por participante
+        # - Respetar máximo por participante para nuevos ingresos a este concurso (no aplica a huérfanos)
         base_qs = UserCongresoMembership.objects.filter(congreso=congreso, role="participante", status="approved").select_related("user")
-        ocupados_ids = set(ConcursoInscripcion.objects.filter(congreso=congreso).exclude(concurso=concurso).values_list("user_id", flat=True))
-        ocupados_ids |= set(ConcursoEquipoMiembro.objects.filter(equipo__concurso=concurso).values_list("user_id", flat=True))
-        options = base_qs.exclude(user_id__in=list(ocupados_ids)).order_by("user__first_name", "user__last_name", "user__username")
-        equipo_participantes_options = [
-            {"id": m.user_id, "display": f"{(m.user.get_full_name() or m.user.username)} ({m.user.email or 'sin-correo'})"}
-            for m in options
-        ]
+        ya_en_equipo_este = set(ConcursoEquipoMiembro.objects.filter(equipo__concurso=concurso).values_list("user_id", flat=True))
+        candidatos_qs = base_qs.exclude(user_id__in=list(ya_en_equipo_este)).order_by("user__first_name", "user__last_name", "user__username")
+        max_por_part = congreso.concursos_por_participante or 0
+        equipo_participantes_options = []
+        for m in candidatos_qs:
+            already_in_this = ConcursoInscripcion.objects.filter(concurso=concurso, user_id=m.user_id).exists()
+            if max_por_part and not already_in_this:
+                current_count = ConcursoInscripcion.objects.filter(congreso=congreso, user_id=m.user_id).count()
+                if current_count >= max_por_part:
+                    continue
+            equipo_participantes_options.append({
+                "id": m.user_id,
+                "display": f"{(m.user.get_full_name() or m.user.username)} ({m.user.email or 'sin-correo'})"
+            })
         # Mapa de miembros por equipo (para preselección en el modal)
         team_members_map = {}
         team_prefill_map = {}
@@ -6652,6 +7186,23 @@ def concurso_participantes_view(request, congreso_id: int, concurso_id: int):
             "team_slots": list(range(2, (concurso.max_por_equipo or 0) + 1)),
             "max_integrantes_equipo": concurso.max_por_equipo or 0,
         })
+        # Opciones para crear equipo: permitir participantes aprobados que no estén ya en este concurso ni en equipos de este concurso,
+        # pero pueden tener inscripciones en otros concursos siempre que no superen su máximo.
+        base_creacion = UserCongresoMembership.objects.filter(congreso=congreso, role="participante", status="approved").select_related("user")
+        ya_en_equipo_este = set(ConcursoEquipoMiembro.objects.filter(equipo__concurso=concurso).values_list("user_id", flat=True))
+        # Permitir elegir participantes ya inscritos (huérfanos) en este concurso; excluir solo los que ya están en algún equipo de este concurso
+        candidatos = base_creacion.exclude(user_id__in=list(ya_en_equipo_este))
+        # Filtrar por máximo por participante
+        max_por_part = congreso.concursos_por_participante or 0
+        equipo_creacion_options = []
+        for m in candidatos.order_by("user__first_name", "user__last_name", "user__username"):
+            already_in_this = ConcursoInscripcion.objects.filter(concurso=concurso, user_id=m.user_id).exists()
+            if max_por_part and not already_in_this:
+                current_count = ConcursoInscripcion.objects.filter(congreso=congreso, user_id=m.user_id).count()
+                if current_count >= max_por_part:
+                    continue
+            equipo_creacion_options.append({"id": m.user_id, "display": f"{(m.user.get_full_name() or m.user.username)} ({m.user.email or 'sin-correo'})"})
+        ctx["equipo_creacion_options"] = equipo_creacion_options
     grupos = request.user.groups.values_list("name", flat=True)
     if "Instructores" in grupos:
         rol = "Instructor"
@@ -6680,11 +7231,38 @@ def conferencia_participantes_view(request, congreso_id: int, conferencia_id: in
         messages.error(request, "La conferencia solicitada no existe en este congreso.")
         return redirect("conferencias_list", congreso.id)
 
-    if request.method == "POST" and request.POST.get("action") == "remove" and request.POST.get("insc_id"):
-        insc_id = request.POST.get("insc_id")
-        ConferenciaInscripcion.objects.filter(id=insc_id, conferencia=conferencia).delete()
-        messages.success(request, "Participante removido de la conferencia.")
-        return redirect("conferencia_participantes", congreso.id, conferencia.id)
+    # Acciones admin: quitar inscripción o inscribir participante
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "remove" and request.POST.get("insc_id"):
+            insc_id = request.POST.get("insc_id")
+            ConferenciaInscripcion.objects.filter(id=insc_id, conferencia=conferencia).delete()
+            messages.success(request, "Participante removido de la conferencia.")
+            return redirect("conferencia_participantes", congreso.id, conferencia.id)
+        elif action == "add" and request.POST.get("membership_id"):
+            mem_id = request.POST.get("membership_id")
+            try:
+                mem = UserCongresoMembership.objects.select_related("user", "performance_level").get(id=mem_id, congreso=congreso, role="participante", status="approved")
+            except UserCongresoMembership.DoesNotExist:
+                messages.error(request, "Membresía inválida o no aprobada.")
+                return redirect("conferencia_participantes", congreso.id, conferencia.id)
+            if ConferenciaInscripcion.objects.filter(congreso=congreso, conferencia=conferencia, user_id=mem.user_id).exists():
+                messages.warning(request, "Este participante ya está inscrito en la conferencia.")
+                return redirect("conferencia_participantes", congreso.id, conferencia.id)
+            max_por_part = congreso.conferencias_por_participante or 0
+            if max_por_part:
+                current_count = ConferenciaInscripcion.objects.filter(congreso=congreso, user_id=mem.user_id).count()
+                if current_count >= max_por_part:
+                    messages.error(request, "Este participante ya alcanzó su máximo de conferencias.")
+                    return redirect("conferencia_participantes", congreso.id, conferencia.id)
+            ConferenciaInscripcion.objects.create(
+                congreso=congreso,
+                conferencia=conferencia,
+                user_id=mem.user_id,
+                performance_level=mem.performance_level,
+            )
+            messages.success(request, "Participante inscrito en la conferencia.")
+            return redirect("conferencia_participantes", congreso.id, conferencia.id)
 
     inscripciones = (
         ConferenciaInscripcion.objects
@@ -6708,7 +7286,6 @@ def conferencia_participantes_view(request, congreso_id: int, conferencia_id: in
         d = extra_values_by_user.setdefault(v.user_id, {})
         d[v.field_id] = v.value
 
-    from .models import UserCongresoMembership
     memberships_qs = UserCongresoMembership.objects.filter(
         congreso=congreso,
         role="participante",
@@ -6720,6 +7297,22 @@ def conferencia_participantes_view(request, congreso_id: int, conferencia_id: in
         or request.user.groups.filter(name__in=["Administradores_Congresos", "Administrador"]).exists()
         or request.user.is_superuser
     )
+    # Elegibles: participantes aprobados del congreso no inscritos en esta conferencia
+    base_qs = UserCongresoMembership.objects.filter(congreso=congreso, role="participante", status="approved").select_related("user")
+    ya_ids = set(ConferenciaInscripcion.objects.filter(congreso=congreso, conferencia=conferencia).values_list("user_id", flat=True))
+    eligibles_qs = base_qs.exclude(user_id__in=list(ya_ids)).order_by("user__first_name", "user__last_name", "user__username")
+    max_por_part = congreso.conferencias_por_participante or 0
+    eligibles = []
+    for m in eligibles_qs:
+        if max_por_part:
+            current_count = ConferenciaInscripcion.objects.filter(congreso=congreso, user_id=m.user_id).count()
+            if current_count >= max_por_part:
+                continue
+        eligibles.append({
+            "id": m.id,
+            "display": f"{(m.user.get_full_name() or m.user.username)} ({m.user.email or 'sin-correo'})"
+        })
+
     ctx = {
         "congreso": congreso,
         "conferencia": conferencia,
@@ -6727,6 +7320,7 @@ def conferencia_participantes_view(request, congreso_id: int, conferencia_id: in
         "extra_fields": extra_fields,
         "extra_values_by_user": extra_values_by_user,
         "membership_by_user": membership_by_user,
+        "eligibles": eligibles,
         "is_admin": is_admin,
     }
     grupos = request.user.groups.values_list("name", flat=True)

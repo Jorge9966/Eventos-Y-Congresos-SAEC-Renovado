@@ -98,8 +98,8 @@
 
     <section class="hero-banner">
       <div class="hero-content">
-        <h1 class="hero-title">Correos permitidos por congreso</h1>
-        <div class="hero-subtitle">Define los dominios de correo aceptados por cada congreso o evento. Ejemplo: @gmail.com, @hotmail.com, @itsva.edu.mx.</div>
+        <h1 class="hero-title">Correos permitidos por evento y congreso</h1>
+        <div class="hero-subtitle">Define los dominios de correo aceptados por cada evento y congreso. Ejemplo: @gmail.com, @hotmail.com, @itsva.edu.mx.</div>
       </div>
     </section>
 
@@ -120,7 +120,7 @@
           <div class="table-controls">
             <div class="controls-left">
               <form method="get" id="congresoForm" style="display:flex; align-items:center; gap:10px;">
-                <label for="congresoSelect">Congreso:</label>
+                <label for="congresoSelect">Evento y Congreso:</label>
                 <select id="congresoSelect" name="c" onchange="document.getElementById('congresoForm').submit()">
                   {% for cg in congresos %}
                     <option value="{{ cg.id }}" {% if congreso.id == cg.id %}selected{% endif %}>{{ cg.name }}</option>
@@ -170,7 +170,7 @@
                 {% endfor %}
               {% else %}
                 <tr>
-                  <td colspan="2" style="text-align:center; color:#64748b; padding:26px;">No hay dominios registrados para este congreso.</td>
+                  <td colspan="2" style="text-align:center; color:#64748b; padding:26px;">No hay dominios registrados para este evento y congreso.</td>
                 </tr>
               {% endif %}
             </tbody>

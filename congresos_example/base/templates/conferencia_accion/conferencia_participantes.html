@@ -24,13 +24,22 @@
     <section class="hero-banner">
       <div class="container-fluid px-0">
         <div class="d-flex align-items-start justify-content-between">
-          <h2 class="hero-title me-3 flex-grow-1" style="font-size:1.6rem;">{{ conferencia.title }}</h2>
+          <div class="d-flex align-items-center flex-grow-1">
+            {% if conferencia.image %}
+              <img src="{{ conferencia.image.url }}" alt="{{ conferencia.title }}" style="width:96px;height:96px;object-fit:cover;border-radius:50%;margin-right:16px;">
+            {% endif %}
+            <h2 class="hero-title m-0" style="font-size:1.6rem;">{{ conferencia.title }}</h2>
+          </div>
           <div class="d-grid gap-2" style="min-width:220px;">
-            <a href="{% url 'conferencia_export' congreso.id conferencia.id %}" class="btn btn-primary btn-lg w-100" aria-label="Reporte de conferencia" title="Reporte de conferencia">
+              <button type="button" class="btn btn-success btn-sm w-100" data-bs-toggle="modal" data-bs-target="#inscribirModal" aria-label="Inscribir" title="Inscribir">
+              <i class="bi bi-person-plus"></i>
+              <span class="visually-hidden">Inscribir</span>
+            </button>
+              <a href="{% url 'conferencia_export' congreso.id conferencia.id %}" class="btn btn-primary btn-sm w-100" aria-label="Reporte" title="Reporte">
               <i class="bi bi-download"></i>
-              <span class="visually-hidden">Reporte de conferencia</span>
+              <span class="visually-hidden"></span>
             </a>
-            <a href="{% url 'conferencia_participantes_print' congreso.id conferencia.id %}" target="_blank" rel="noopener" class="btn btn-dark btn-lg w-100" aria-label="Imprimir" title="Imprimir">
+              <a href="{% url 'conferencia_participantes_print' congreso.id conferencia.id %}" target="_blank" rel="noopener" class="btn btn-dark btn-sm w-100" aria-label="Imprimir" title="Imprimir">
               <i class="bi bi-printer"></i>
               <span class="visually-hidden">Imprimir</span>
             </a>
@@ -38,6 +47,51 @@
         </div>
       </div>
     </section>
+
+    {% if messages %}
+      <div class="container-fluid px-0">
+        {% for m in messages %}
+          {% if 'success' in m.tags %}
+            <div class="alert alert-success">{{ m }}</div>
+          {% elif 'error' in m.tags %}
+            <div class="alert alert-danger">{{ m }}</div>
+          {% elif 'warning' in m.tags %}
+            <div class="alert alert-warning">{{ m }}</div>
+          {% else %}
+            <div class="alert alert-info">{{ m }}</div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <!-- Modal Inscribir Participante -->
+    <div class="modal fade" id="inscribirModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header"><h5 class="modal-title">Inscribir participante</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+          <form method="post" action="{% url 'conferencia_participantes' congreso.id conferencia.id %}">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="add" />
+            <div class="modal-body">
+              <div class="mb-3">
+                <label class="form-label">Participante</label>
+                <select name="membership_id" class="form-select" required>
+                  {% if eligibles %}
+                    {% for opt in eligibles %}
+                      <option value="{{ opt.id }}">{{ opt.display }}</option>
+                    {% endfor %}
+                  {% else %}
+                    <option value="" disabled>No hay participantes elegibles</option>
+                  {% endif %}
+                </select>
+                <div class="form-text">Solo se listan quienes no están inscritos en esta conferencia.</div>
+              </div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button type="submit" class="btn btn-success">Inscribir</button></div>
+          </form>
+        </div>
+      </div>
+    </div>
 
     <div class="container-fluid" style="padding-left:0; padding-right:0;">
       <div class="panel"><div class="panel-header"><span class="panel-title-blue">Participantes</span></div>
@@ -99,3 +153,56 @@
   </div>
 </body>
 </html>
+<script>
+  // Fallback para abrir/cerrar modales cuando Bootstrap JS no está cargado
+  (function(){
+    function hasBootstrap(){ return typeof bootstrap !== 'undefined' && bootstrap.Modal; }
+    if (hasBootstrap()) return;
+    var triggers = document.querySelectorAll('[data-bs-toggle="modal"][data-bs-target]');
+    if(!triggers.length) return;
+    function openModal(modal){
+      if(!modal) return;
+      var id = modal.getAttribute('id') || ('modal-' + Date.now());
+      modal.setAttribute('id', id);
+      var backdropId = id + '-backdrop';
+      var backdrop = document.getElementById(backdropId);
+      if(!backdrop){
+        backdrop = document.createElement('div');
+        backdrop.id = backdropId;
+        backdrop.className = 'modal-backdrop fade show';
+        document.body.appendChild(backdrop);
+      }
+      modal.style.display = 'block';
+      modal.classList.add('show');
+      modal.removeAttribute('aria-hidden');
+      document.body.classList.add('modal-open');
+      modal.addEventListener('click', function onClick(e){
+        if(e.target.classList.contains('btn-close') || e.target.closest('[data-bs-dismiss="modal"]')){
+          closeModal(modal);
+          modal.removeEventListener('click', onClick);
+        }
+      });
+      function onEsc(ev){ if(ev.key === 'Escape'){ closeModal(modal); document.removeEventListener('keydown', onEsc);} }
+      document.addEventListener('keydown', onEsc);
+    }
+    function closeModal(modal){
+      var id = modal.getAttribute('id');
+      var backdrop = document.getElementById(id + '-backdrop');
+      modal.classList.remove('show');
+      modal.style.display = 'none';
+      modal.setAttribute('aria-hidden','true');
+      document.body.classList.remove('modal-open');
+      if(backdrop) backdrop.remove();
+    }
+    triggers.forEach(function(btn){
+      btn.addEventListener('click', function(ev){
+        ev.preventDefault();
+        var targetSel = btn.getAttribute('data-bs-target');
+        try{
+          var modal = document.querySelector(targetSel);
+          openModal(modal);
+        }catch(e){ console.warn('modal fallback error', e); }
+      });
+    });
+  })();
+</script>

@@ -96,8 +96,8 @@
 
     <section class="hero-banner">
       <div class="hero-content">
-        <h1 class="hero-title">Nivel de desempeño</h1>
-        <div class="hero-subtitle">Administre los niveles de desempeño utilizados para evaluar y clasificar resultados.</div>
+        <h1 class="hero-title">Rol / Cargo / Semestre</h1>
+        <div class="hero-subtitle">Administre los roles / cargos / Semestres utilizados para evaluar y clasificar resultados.</div>
       </div>
     </section>
 
@@ -111,12 +111,12 @@
 
     <div class="table-wrapper">
       <div class="table-card">
-        <div class="card-header"><span class="es-blue">Listado de niveles de desempeño</span></div>
+        <div class="card-header"><span class="es-blue">Listado de Roles / Cargos / Semestres</span></div>
         <div class="card-body">
           <div class="table-controls">
             <div class="controls-left">
               <form method="get" id="congresoForm" style="display:flex; align-items:center; gap:10px;">
-                <label for="congresoSelect">Congreso:</label>
+                <label for="congresoSelect">Evento y Congreso:</label>
                 <select id="congresoSelect" name="c" onchange="document.getElementById('congresoForm').submit()">
                   {% for cg in congresos %}
                     <option value="{{ cg.id }}" {% if congreso.id == cg.id %}selected{% endif %}>{{ cg.name }}</option>
@@ -142,7 +142,7 @@
           <table class="data" id="nivelesTable">
             <thead>
               <tr>
-                <th><span class="es-blue">Nivel de desempeño</span></th>
+                <th><span class="es-blue">Rol / Cargo / Semestre</span></th>
                 <th class="col-actions"><span class="es-blue">Acción</span></th>
               </tr>
             </thead>
@@ -165,7 +165,7 @@
                 {% endfor %}
               {% else %}
                 <tr>
-                  <td colspan="2" style="text-align:center; color:#64748b; padding:26px;">No hay niveles registrados para este congreso.</td>
+                  <td colspan="2" style="text-align:center; color:#64748b; padding:26px;">No hay roles / cargos / semestres registrados para este evento y congreso.</td>
                 </tr>
               {% endif %}
             </tbody>
@@ -182,9 +182,9 @@
       <div class="table-card" style="margin-top:20px;">
         <div class="card-header">
           {% if edit_level %}
-            <span class="es-blue">Actualizar nivel</span>
+            <span class="es-blue">Actualizar Rol / Cargo / Semestre</span>
           {% else %}
-            <span class="es-blue">Agregar un nuevo nivel</span>
+            <span class="es-blue">Agregar un nuevo Rol / Cargo / Semestre</span>
           {% endif %}
         </div>
         <div class="card-body" style="padding:16px; background:#fff;">

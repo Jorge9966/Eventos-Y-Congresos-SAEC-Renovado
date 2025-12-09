@@ -24,30 +24,127 @@
     <section class="hero-banner">
       <div class="container-fluid px-0">
         <div class="d-flex align-items-start justify-content-between">
-          <h2 class="hero-title me-3 flex-grow-1" style="font-size:1.6rem;">{{ concurso.title }}</h2>
-          <div class="d-grid gap-2" style="min-width:220px;">
-            <a href="{% url 'concurso_export' congreso.id concurso.id %}" class="btn btn-primary btn-lg w-100" aria-label="Reporte de concurso" title="Reporte de concurso">
+          <div class="d-flex align-items-center flex-grow-1">
+            {% if concurso.image %}
+              <img src="{{ concurso.image.url }}" alt="{{ concurso.title }}" style="width:96px;height:96px;object-fit:cover;border-radius:50%;margin-right:16px;">
+            {% endif %}
+            <h2 class="hero-title m-0" style="font-size:1.6rem;">{{ concurso.title }}</h2>
+          </div>
+          <div class="d-grid gap-2" style="min-width:180px;">
+            {% if concurso.type == 'individual' %}
+              <button type="button" class="btn btn-success btn-sm w-100" data-bs-toggle="modal" data-bs-target="#inscribirModal" aria-label="Inscribir" title="Inscribir">
+                <i class="bi bi-person-plus"></i>
+                <span class="visually-hidden">Inscribir</span>
+              </button>
+            {% else %}
+                <button type="button" class="btn btn-success btn-sm w-100" data-bs-toggle="modal" data-bs-target="#crearEquipoModal" aria-label="Inscribir" title="Inscribir">
+                  <i class="bi bi-plus-lg"></i>
+                  <span class="visually-hidden">Inscribir</span>
+                </button>
+            {% endif %}
+            <a href="{% url 'concurso_export' congreso.id concurso.id %}" class="btn btn-primary btn-sm w-100" aria-label="Reporte de concurso" title="Reporte de concurso">
               <i class="bi bi-download"></i>
               <span class="visually-hidden">Reporte de concurso</span>
             </a>
-            <a href="{% url 'concurso_participantes_print' congreso.id concurso.id %}" target="_blank" rel="noopener" class="btn btn-dark btn-lg w-100" aria-label="Imprimir" title="Imprimir">
+            <a href="{% url 'concurso_participantes_print' congreso.id concurso.id %}" target="_blank" rel="noopener" class="btn btn-dark btn-sm w-100" aria-label="Imprimir" title="Imprimir">
               <i class="bi bi-printer"></i>
               <span class="visually-hidden">Imprimir</span>
             </a>
           </div>
+            {% if concurso.type == 'individual' %}
+            <!-- Modal Inscribir Participante (Concurso Individual) -->
+            <div class="modal fade" id="inscribirModal" tabindex="-1" aria-hidden="true">
+              <div class="modal-dialog">
+                <div class="modal-content">
+                  <div class="modal-header"><h5 class="modal-title">Inscribir participante</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+                  <form method="post" action="{% url 'concurso_participantes' congreso.id concurso.id %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="add" />
+                    <div class="modal-body">
+                      <div class="mb-3">
+                        <label class="form-label">Participante</label>
+                        <select name="membership_id" class="form-select" required>
+                          {% if eligibles %}
+                            {% for opt in eligibles %}
+                              <option value="{{ opt.id }}">{{ opt.display }}</option>
+                            {% endfor %}
+                          {% else %}
+                            <option value="" disabled>No hay participantes elegibles</option>
+                          {% endif %}
+                        </select>
+                        <div class="form-text">Solo se listan quienes no están inscritos en este concurso.</div>
+                      </div>
+                    </div>
+                    <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button type="submit" class="btn btn-success">Inscribir</button></div>
+                  </form>
+                </div>
+              </div>
+            </div>
+            {% endif %}
         </div>
       </div>
     </section>
 
-    {# Mensajes de concurso (éxitos) #}
+    {# Mensajes de concurso #}
     {% if messages %}
       <div class="container-fluid px-0">
         {% for m in messages %}
-          {% if 'concurso' in m.tags and 'success' in m.tags %}
-            <div class="alert alert-success">{{ m }}</div>
+          {% if 'concurso' in m.tags %}
+            {% if 'success' in m.tags %}
+              <div class="alert alert-success">{{ m }}</div>
+            {% elif 'error' in m.tags %}
+              <div class="alert alert-danger">{{ m }}</div>
+            {% elif 'warning' in m.tags %}
+              <div class="alert alert-warning">{{ m }}</div>
+            {% else %}
+              <div class="alert alert-info">{{ m }}</div>
+            {% endif %}
           {% endif %}
         {% endfor %}
       </div>
+    {% endif %}
+
+    {% if concurso.type == 'grupal' %}
+    <!-- Modal Crear Equipo (Concurso Grupal) -->
+    <div class="modal fade" id="crearEquipoModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header"><h5 class="modal-title">Crear equipo</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+          <form method="post" action="{% url 'concurso_participantes' congreso.id concurso.id %}">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="create_team" />
+            <div class="modal-body">
+              <div class="mb-3">
+                <label class="form-label">Nombre del equipo</label>
+                <input type="text" name="team_name" class="form-control" required maxlength="100" />
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Líder</label>
+                <select name="team_member_1" class="form-select" required>
+                  {% for opt in equipo_creacion_options %}
+                    <option value="{{ opt.id }}">{{ opt.display }}</option>
+                  {% endfor %}
+                </select>
+                <div class="form-text">El líder cuenta como integrante.</div>
+              </div>
+              {% for slot in team_slots %}
+              <div class="mb-3">
+                <label class="form-label">Integrante {{ slot }}</label>
+                <select name="team_member_{{ slot }}" class="form-select">
+                  <option value="">-- Opcional --</option>
+                  {% for opt in equipo_creacion_options %}
+                    <option value="{{ opt.id }}">{{ opt.display }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              {% endfor %}
+              <div class="form-text">Se valida el máximo por equipo y por participante.</div>
+            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button type="submit" class="btn btn-success">Crear</button></div>
+          </form>
+        </div>
+      </div>
+    </div>
     {% endif %}
 
     <div class="container-fluid" style="padding-left:0; padding-right:0;">
@@ -68,13 +165,14 @@
                       <button class="btn btn-outline-danger btn-sm"><i class="bi bi-people-fill"></i> <i class="bi bi-trash"></i></button>
                     </form>
                     </div>
+                                    
                   </div>
                   {# Modal editar equipo #}
                   <div class="modal fade" id="editTeamModal_{{ t.equipo.id }}" tabindex="-1" aria-hidden="true">
                     <div class="modal-dialog">
                       <div class="modal-content">
                         <div class="modal-header"><h5 class="modal-title">Editar equipo</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
-                        <form method="post">
+                        <form method="post" action="{% url 'concurso_participantes' congreso.id concurso.id %}">
                           {% csrf_token %}
                           <input type="hidden" name="action" value="edit_team" />
                           <input type="hidden" name="team_id" value="{{ t.equipo.id }}" />
@@ -146,7 +244,7 @@
                           <tr>
                             <td>{{ ins.user|full_name }}</td>
                             <td>{{ ins.user.email|default:'—' }}</td>
-                            <td>{{ ins.performance_level.name|default:'—' }}</td>
+                            <td>{% firstof ins.performance_level.name ins.user|performance_level_for:congreso "—" %}</td>
                             {% for val in row.values_ordered %}<td>{{ val|default:'—' }}</td>{% endfor %}
                             <td class="text-end">
                               <form method="post" style="display:inline-flex;gap:6px;">
@@ -195,7 +293,7 @@
                           <tr>
                             <td>{{ ins.user|full_name }}</td>
                             <td>{{ ins.user.email|default:'—' }}</td>
-                            <td>{{ ins.performance_level.name|default:'—' }}</td>
+                            <td>{% firstof ins.performance_level.name ins.user|performance_level_for:congreso "—" %}</td>
                             {% for val in row.values_ordered %}<td>{{ val|default:'—' }}</td>{% endfor %}
                             <td class="text-end">
                               <form method="post" style="display:inline-flex;gap:6px;">
@@ -238,7 +336,7 @@
                       <tr>
                         <td>{{ ins.user|full_name }}</td>
                         <td>{{ ins.user.email|default:"—" }}</td>
-                        <td>{{ ins.performance_level.name|default:"—" }}</td>
+                        <td>{% firstof ins.performance_level.name ins.user|performance_level_for:congreso "—" %}</td>
                         {% for ef in extra_fields %}
                           {% with peruser=extra_values_by_user|get_item:ins.user.id %}
                             <td>{{ peruser|get_item:ef.id|default:"—" }}</td>
