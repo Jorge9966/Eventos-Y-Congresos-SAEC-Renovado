@@ -24,7 +24,7 @@ from base import views
 urlpatterns = [
     path("admin/", admin.site.urls),
     # Página pública inicial con todos los congresos/eventos
-    path("", views.home_congresos, name="home"),
+    path("", views.introduccion_view, name="home"),
     # Rutas de la app (internas/protegidas)
     path("", include("base.urls")),
     path('inicio/', views.inicio_view, name='inicio'),

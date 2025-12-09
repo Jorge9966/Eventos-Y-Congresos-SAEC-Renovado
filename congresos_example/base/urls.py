@@ -7,7 +7,8 @@ from . import views
 # volver a añadir app_name y actualizar todas las referencias a 'events:...'.
 
 urlpatterns = [
-    path("", views.home_congresos, name="home_congresos"),
+    path("", views.introduccion_view, name="home"),
+    path("home/", views.home_congresos, name="home_congresos"),
     path("login/", views.login_view, name="login"),
     path("accounts/register/", views.registro_view, name="register"),
     path("recuperar-contrasena/", views.recuperar_contrasena_view, name="password_reset"),

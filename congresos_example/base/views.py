@@ -190,6 +190,11 @@ def home_congresos(request):
     return render(request, "home.html", {"congresos": congresos})
 
 
+def introduccion_view(request):
+    """Página de introducción pública con información del sistema y acceso al home."""
+    return render(request, "introduccion.html")
+
+
 # -------------------
 # LOGIN
 # -------------------
