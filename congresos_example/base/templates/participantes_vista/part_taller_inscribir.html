@@ -181,7 +181,7 @@
         <div id="sec-desc" class="description-body">{{ taller.description|default:"Sin descripción"|safe }}</div>
         <div id="sec-list" class="description-body" style="display:none;">
           <div class="participants-strip{% if not taller.inscripciones.count %} empty{% endif %}">
-            <div class="ps-title"><span class="ps-dash">–</span> Participantesinscritos</div>
+            <div class="ps-title"><span class="ps-dash">–</span> Participantes inscritos</div>
             <div class="ps-count">{{ taller.inscripciones.count }}{% if capacidad %} / {{ capacidad }}{% endif %}</div>
           </div>
           {% if participantes_rows %}

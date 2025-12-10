@@ -29,11 +29,20 @@
   <div class="main">
     {% include 'partials/congreso_topbar.html' %}
     <section class="hero-banner">
-      <div class="container-fluid d-flex align-items-center justify-content-between px-0">
-        <h1 class="hero-title">Conferencias</h1>
-        <div class="d-flex gap-2">
-          <a href="{% url 'conferencias_export' congreso.id %}" class="btn btn-light" aria-label="Descargar reporte" title="Descargar reporte"><i class="bi bi-download"></i></a>
-          <a href="{% url 'conferencia_nueva' congreso.id %}" class="btn btn-primary" aria-label="Agregar conferencia" title="Agregar conferencia"><i class="bi bi-plus-lg"></i></a>
+      <div class="container-fluid px-0">
+        <div class="d-flex align-items-start justify-content-between">
+          <div class="d-flex align-items-center flex-grow-1">
+            <img src="{% static 'base/img/conferencia.png' %}" alt="Conferencias" style="width:140px;height:140px;object-fit:contain;border-radius:12px;background:#ffffff;margin-right:20px;">
+            <h1 class="hero-title m-0" style="font-size:2.4rem;font-weight:800;">Conferencias</h1>
+          </div>
+          <div class="d-grid gap-2" style="min-width:220px;">
+            <a href="{% url 'conferencias_export' congreso.id %}" class="btn btn-primary btn-lg w-100" aria-label="Descargar reporte" title="Descargar reporte">
+              <i class="bi bi-download"></i>
+            </a>
+            <a href="{% url 'conferencia_nueva' congreso.id %}" class="btn btn-success btn-lg w-100" aria-label="Agregar conferencia" title="Agregar conferencia">
+              <i class="bi bi-plus-lg"></i>
+            </a>
+          </div>
         </div>
       </div>
     </section>

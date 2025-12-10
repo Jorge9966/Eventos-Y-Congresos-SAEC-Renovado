@@ -96,9 +96,24 @@
     <div class="container-fluid" style="padding-left:0; padding-right:0;">
       <div class="panel"><div class="panel-header"><span class="panel-title-blue">Participantes</span></div>
         <div class="panel-body">
+          <div class="d-flex flex-wrap align-items-center justify-content-between mb-2">
+            <div class="d-flex align-items-center gap-2">
+              <label class="form-label m-0">Mostrar</label>
+              <select id="entriesSelectConferencia" class="form-select form-select-sm" style="width:auto;">
+                <option value="10">10</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+              <span class="ms-1">registros</span>
+            </div>
+            <div class="ms-auto" style="max-width:300px;">
+              <input id="tableSearchConferencia" type="text" class="form-control form-control-sm" placeholder="Buscar..." />
+            </div>
+          </div>
           {% if inscripciones %}
             <div class="table-responsive">
-              <table class="table table-striped align-middle">
+              <table id="conferenciaTable" class="table table-striped align-middle">
                 <thead>
                   <tr>
                     <th>Nombre</th>
@@ -143,6 +158,10 @@
                 </tbody>
               </table>
             </div>
+            <div class="d-flex align-items-center justify-content-between mt-2">
+              <div id="conferenciaInfo" class="small text-muted"></div>
+              <ul id="conferenciaPager" class="pagination pagination-sm m-0"></ul>
+            </div>
           {% else %}
             <div class="empty">Aún no hay participantes registrados para esta conferencia en "{{ congreso.name }}".</div>
           {% endif %}
@@ -154,6 +173,53 @@
 </body>
 </html>
 <script>
+  // Búsqueda + paginación cliente para el listado de participantes de la conferencia
+  (function(){
+    var search = document.getElementById('tableSearchConferencia');
+    var select = document.getElementById('entriesSelectConferencia');
+    var table = document.getElementById('conferenciaTable');
+    var info = document.getElementById('conferenciaInfo');
+    var pager = document.getElementById('conferenciaPager');
+    var STORAGE_KEY = 'conferencia_rows_per_page';
+    var currentPage = 1;
+    if(!table) return;
+    var tbody = table.querySelector('tbody');
+    function getRows(){ return Array.from(tbody.querySelectorAll('tr')); }
+    function buildPager(total, pageSize, page){
+      pager.innerHTML = '';
+      if(total <= pageSize){ return; }
+      var totalPages = Math.max(1, Math.ceil(total / pageSize));
+      function add(label, target, disabled, active){
+        var li = document.createElement('li');
+        li.className = 'page-item' + (disabled?' disabled':'') + (active?' active':'');
+        var a = document.createElement('a'); a.className='page-link'; a.href='#'; a.textContent=label;
+        a.addEventListener('click', function(e){ e.preventDefault(); if(disabled||active) return; currentPage=target; update(); });
+        li.appendChild(a); pager.appendChild(li);
+      }
+      add('Previous', Math.max(1, page-1), page===1, false);
+      var totalBtns = 7; var start = Math.max(1, page-3); var end = Math.min(totalPages, start+totalBtns-1);
+      start = Math.max(1, Math.min(start, end-totalBtns+1));
+      for(var p=start; p<=end; p++) add(String(p), p, false, p===page);
+      add('Next', Math.min(totalPages, page+1), page===totalPages, false);
+    }
+    function update(){
+      var term = (search && search.value || '').toLowerCase();
+      var rows = getRows();
+      var pageSize = select ? parseInt(select.value||'10',10) : rows.length;
+      var filtered = rows.filter(function(tr){ return (tr.innerText||'').toLowerCase().indexOf(term) !== -1; });
+      var total = filtered.length; var totalPages = Math.max(1, Math.ceil(total/pageSize));
+      if(currentPage>totalPages) currentPage=totalPages; if(currentPage<1) currentPage=1;
+      rows.forEach(function(tr){ tr.style.display='none'; });
+      var startIdx = total ? (currentPage-1)*pageSize + 1 : 0;
+      var endIdx = total ? Math.min(currentPage*pageSize, total) : 0;
+      filtered.slice(startIdx-1, endIdx).forEach(function(tr){ tr.style.display=''; });
+      if(info) info.textContent = 'Mostrando ' + startIdx + ' a ' + endIdx + ' de ' + total + ' registros';
+      buildPager(total, pageSize, currentPage);
+    }
+    if(select){ var saved = localStorage.getItem(STORAGE_KEY); if(saved && ['10','25','50','100'].includes(saved)) select.value=saved; select.addEventListener('change', function(){ localStorage.setItem(STORAGE_KEY, select.value); currentPage=1; update(); }); }
+    if(search){ search.addEventListener('input', function(){ currentPage=1; update(); }); }
+    update();
+  })();
   // Fallback para abrir/cerrar modales cuando Bootstrap JS no está cargado
   (function(){
     function hasBootstrap(){ return typeof bootstrap !== 'undefined' && bootstrap.Modal; }

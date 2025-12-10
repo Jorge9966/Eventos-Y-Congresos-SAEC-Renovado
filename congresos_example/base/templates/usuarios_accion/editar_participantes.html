@@ -28,6 +28,7 @@
 
       <form class="form-card" method="post">
         {% csrf_token %}
+        <input type="hidden" name="last_name" id="hidden_last_name" value="{{ membership.user.last_name }}" />
         {% if messages %}
           {% for m in messages %}
             <div class="alert alert-{% if 'error' in m.tags %}danger{% elif 'warning' in m.tags %}warning{% elif 'info' in m.tags %}info{% else %}success{% endif %}">{{ m }}</div>
@@ -108,6 +109,17 @@
   </div>
   <script>
     (function(){
+      // Compose hidden last_name from apellido fields on submit for backend compatibility
+      const form = document.querySelector('form.form-card');
+      if(form){
+        form.addEventListener('submit', function(){
+          var apPat = (form.querySelector('input[name="apellido_paterno"]')?.value || '').trim();
+          var apMat = (form.querySelector('input[name="apellido_materno"]')?.value || '').trim();
+          var combined = (apPat + ' ' + apMat).trim();
+          var hidden = form.querySelector('#hidden_last_name');
+          if(hidden){ hidden.value = combined; }
+        });
+      }
       const input = document.getElementById('passwordInputInstr');
       const btn = document.getElementById('togglePasswordInstr');
       if (input && btn) {

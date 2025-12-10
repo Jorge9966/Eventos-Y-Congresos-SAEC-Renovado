@@ -208,18 +208,33 @@
               <option value="instructor" {% if edit_field.role_scope == 'instructor' %}selected{% endif %}>Solo Instructores</option>
             </select>
           </div>
-          <!-- Row 2: Requerido + Activo -->
-          <div class="col-6 col-md-3 form-check d-flex align-items-center" style="padding-left:2.2rem;">
-            <input class="form-check-input" type="checkbox" id="requiredCheck" name="required" {% if edit_field.required %}checked{% endif %}>
-            <label class="form-check-label" for="requiredCheck">Requerido</label>
+          <!-- Row 2: Tipo de campo + Requerido + Activo -->
+          <div class="col-12 col-md-6">
+            <label class="form-label" for="typeSelect">Tipo de campo</label>
+            <select id="typeSelect" name="field_type" class="form-select">
+              <option value="text" {% if edit_field.field_type == 'text' %}selected{% endif %}>Texto</option>
+              <option value="select" {% if edit_field.field_type == 'select' %}selected{% endif %}>Lista (selección)</option>
+            </select>
           </div>
-          <div class="col-6 col-md-3 form-check d-flex align-items-center" style="padding-left:2.2rem;">
-            <input class="form-check-input" type="checkbox" id="activeCheck" name="active" {% if edit_field.active %}checked{% endif %}>
-            <label class="form-check-label" for="activeCheck">Activo</label>
+          <div class="col-12 col-md-6 d-flex align-items-center" style="gap:16px;">
+            <div class="form-check d-flex align-items-center" style="gap:6px; margin-right:10px;">
+              <input class="form-check-input" type="checkbox" id="requiredCheck" name="required" {% if edit_field.required %}checked{% endif %}>
+              <label class="form-check-label" for="requiredCheck">Requerido</label>
+            </div>
+            <div class="form-check d-flex align-items-center" style="gap:6px; margin-right:10px;">
+              <input class="form-check-input" type="checkbox" id="activeCheck" name="active" {% if edit_field.active %}checked{% endif %}>
+              <label class="form-check-label" for="activeCheck">Activo</label>
+            </div>
+            <div class="form-check d-flex align-items-center" style="gap:6px;">
+              <input class="form-check-input" type="checkbox" id="uniqueCheck" name="unique_value" {% if edit_field.unique_value %}checked{% endif %}>
+              <label class="form-check-label" for="uniqueCheck">Irrepetible</label>
+            </div>
           </div>
-          <div class="col-6 col-md-3 form-check d-flex align-items-center" style="padding-left:2.2rem;">
-            <input class="form-check-input" type="checkbox" id="uniqueCheck" name="unique_value" {% if edit_field.unique_value %}checked{% endif %}>
-            <label class="form-check-label" for="uniqueCheck">Irrepetible</label>
+          <!-- Row 3: Opciones (solo para Lista) -->
+          <div class="col-12" id="choicesRowEdit" {% if edit_field.field_type != 'select' %}style="display:none;"{% endif %}>
+            <label class="form-label" for="choicesInputEdit">Opciones (una por línea o separadas por comas)</label>
+            <textarea id="choicesInputEdit" name="choices_text" class="form-control" rows="4" placeholder="Ej. Hombre\nMujer">{{ edit_field.choices_text }}</textarea>
+            <div class="form-text">Se aplican solo si el tipo es "Lista".</div>
           </div>
           <!-- Row 3: Botones -->
           <div class="col-12" style="display:flex; gap:8px;">
@@ -245,20 +260,35 @@
               <option value="instructor">Solo Instructores</option>
             </select>
           </div>
-          <!-- Row 2: Requerido + Activo -->
-          <div class="col-6 col-md-3 form-check d-flex align-items-center" style="padding-left:2.2rem;">
-            <input class="form-check-input" type="checkbox" id="requiredCheck" name="required">
-            <label class="form-check-label" for="requiredCheck">Requerido</label>
+          <!-- Row 2: Tipo de campo + Requerido + Activo -->
+          <div class="col-12 col-md-6">
+            <label class="form-label" for="typeSelectNew">Tipo de campo</label>
+            <select id="typeSelectNew" name="field_type" class="form-select">
+              <option value="text" selected>Texto</option>
+              <option value="select">Lista (selección)</option>
+            </select>
           </div>
-          <div class="col-6 col-md-3 form-check d-flex align-items-center" style="padding-left:2.2rem;">
-            <input class="form-check-input" type="checkbox" id="activeCheck" name="active" checked>
-            <label class="form-check-label" for="activeCheck">Activo</label>
+          <div class="col-12 col-md-6 d-flex align-items-center" style="gap:16px;">
+            <div class="form-check d-flex align-items-center" style="gap:6px; margin-right:10px;">
+              <input class="form-check-input" type="checkbox" id="requiredCheckNew" name="required">
+              <label class="form-check-label" for="requiredCheckNew">Requerido</label>
+            </div>
+            <div class="form-check d-flex align-items-center" style="gap:6px; margin-right:10px;">
+              <input class="form-check-input" type="checkbox" id="activeCheckNew" name="active" checked>
+              <label class="form-check-label" for="activeCheckNew">Activo</label>
+            </div>
+            <div class="form-check d-flex align-items-center" style="gap:6px;">
+              <input class="form-check-input" type="checkbox" id="uniqueCheckNew" name="unique_value">
+              <label class="form-check-label" for="uniqueCheckNew">Irrepetible</label>
+            </div>
           </div>
-          <div class="col-6 col-md-3 form-check d-flex align-items-center" style="padding-left:2.2rem;">
-            <input class="form-check-input" type="checkbox" id="uniqueCheckNew" name="unique_value">
-            <label class="form-check-label" for="uniqueCheckNew">Irrepetible</label>
+          <!-- Row 3: Opciones (solo para Lista) -->
+          <div class="col-12" id="choicesRowNew" style="display:none;">
+            <label class="form-label" for="choicesInputNew">Opciones (una por línea o separadas por comas)</label>
+            <textarea id="choicesInputNew" name="choices_text" class="form-control" rows="4" placeholder="Ej. Hombre\nMujer"></textarea>
+            <div class="form-text">Se aplican solo si el tipo es "Lista".</div>
           </div>
-          <!-- Row 3: Botón Guardar -->
+          <!-- Row 4: Botón Guardar -->
           <div class="col-12">
             <button class="btn btn-primary" type="submit">Guardar</button>
           </div>
@@ -284,6 +314,22 @@
         document.addEventListener('click', function(){ closeUserMenu(); });
         document.addEventListener('keydown', function(ev){ if(ev.key === 'Escape') closeUserMenu(); });
         userMenu.addEventListener('click', function(e){ e.stopPropagation(); });
+      }
+
+      // Mostrar/ocultar opciones según tipo de campo
+      var typeEdit = document.getElementById('typeSelect');
+      var choicesEdit = document.getElementById('choicesRowEdit');
+      if(typeEdit && choicesEdit){
+        typeEdit.addEventListener('change', function(){
+          choicesEdit.style.display = (typeEdit.value === 'select') ? '' : 'none';
+        });
+      }
+      var typeNew = document.getElementById('typeSelectNew');
+      var choicesNew = document.getElementById('choicesRowNew');
+      if(typeNew && choicesNew){
+        typeNew.addEventListener('change', function(){
+          choicesNew.style.display = (typeNew.value === 'select') ? '' : 'none';
+        });
       }
 
       // Búsqueda + paginación simple en cliente (igual a correos)

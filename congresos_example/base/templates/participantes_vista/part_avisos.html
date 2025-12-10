@@ -29,21 +29,25 @@
   <div class="page-wrap">
     <h1 class="page-title">Avisos</h1>
     <div class="divider" aria-hidden="true"></div>
+    {% if avisos_new_count and avisos_new_count > 0 %}
+      <div class="alert alert-info mb-3" role="status">
+        Tienes {{ avisos_new_count }} aviso{% if avisos_new_count != 1 %}s{% endif %} nuevo{% if avisos_new_count != 1 %}s{% endif %} desde tu último inicio de sesión.
+      </div>
+    {% endif %}
     {% if not approved %}
-      <div class="warning-box">Tu membresía aún no está aprobada o fue rechazada. No puedes acceder a los avisos.</div>
-    {% else %}
-      {% if avisos %}
-        {% for a in avisos %}
-          <div class="aviso">
-            <div class="head">
-              <span class="badge"><i class="bi bi-calendar3"></i> {{ a.created_at|date:"F d, Y" }}</span>
-            </div>
-            <div class="contenido">{{ a.content }}</div>
+      <div class="warning-box">Tu membresía aún no está aprobada o fue rechazada. Acceso limitado a funciones, pero puedes revisar los avisos del congreso.</div>
+    {% endif %}
+    {% if avisos %}
+      {% for a in avisos %}
+        <div class="aviso">
+          <div class="head">
+            <span class="badge"><i class="bi bi-calendar3"></i> {{ a.created_at|date:"F d, Y" }}</span>
           </div>
-        {% endfor %}
-      {% else %}
-        <div class="empty">No hay avisos publicados para "{{ congreso.name }}".</div>
-      {% endif %}
+          <div class="contenido">{{ a.content }}</div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="empty">No hay avisos publicados para "{{ congreso.name }}".</div>
     {% endif %}
   </div>
   {% include 'partials/footer_participante.html' %}

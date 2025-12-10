@@ -5,7 +5,8 @@ from django.contrib.auth.models import User, Group
 from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash
 from django.urls import reverse
-from django.http import HttpResponseRedirect
+from django.http import HttpResponseRedirect, HttpResponse
+from django.utils.html import strip_tags
 from django.core.mail import send_mail
 from django.conf import settings
 from django.core.files.uploadedfile import UploadedFile
@@ -14,8 +15,9 @@ from django.core.exceptions import ValidationError
 from django.utils.http import url_has_allowed_host_and_scheme
 import random
 import re
-from datetime import timedelta
+from datetime import timedelta, datetime
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.db import transaction
 import logging
 from functools import wraps
@@ -38,9 +40,128 @@ from .models import (
     CongresoAdminScope,
     ConcursoEquipo,
     ConcursoEquipoMiembro,
+    Aviso,
 )
 
 logger = logging.getLogger(__name__)
+
+# --------- UTILIDADES DE EXPORTACIÓN XLSX ---------
+try:
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Side, Font
+except Exception:  # openpyxl está en requirements.txt; si falla, manejaremos en runtime
+    Workbook = None
+    Alignment = Border = Side = Font = None
+
+def _xlsx_border_thin():
+    if not Side or not Border:
+        return None
+    thin = Side(style="thin", color="000000")
+    return Border(top=thin, bottom=thin, left=thin, right=thin)
+
+def _xlsx_add_resumen(ws, pairs: list[tuple[str, str]]):
+    # Escribir filas
+    for k, v in pairs:
+        ws.append([k, v])
+    # Anchos de columna
+    if ws.column_dimensions.get('A'):
+        ws.column_dimensions['A'].width = 18
+    if ws.column_dimensions.get('B'):
+        ws.column_dimensions['B'].width = 120
+    else:
+        ws.column_dimensions['B'] = ws.column_dimensions['A']
+        ws.column_dimensions['B'].width = 120
+    border = _xlsx_border_thin()
+    desc_row_idx = None
+    # Aplicar estilos
+    row_idx = 1
+    for (k, _v) in pairs:
+        if str(k).strip().lower() == 'descripción':
+            desc_row_idx = row_idx
+        row_idx += 1
+    for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=2):
+        for cell in row:
+            if Alignment:
+                cell.alignment = Alignment(wrap_text=True, vertical='top')
+            if border:
+                cell.border = border
+    # Primera columna en negritas
+    if Font:
+        for r in range(1, ws.max_row + 1):
+            ws.cell(row=r, column=1).font = Font(bold=True)
+    # Limitar visualmente la fila de Descripción a ~3 líneas (altura fija),
+    # manteniendo el contenido completo accesible al seleccionar la celda.
+    if desc_row_idx:
+        try:
+            ws.row_dimensions[desc_row_idx].height = 48  # aprox 3 líneas en Calibri 11-12
+        except Exception:
+            pass
+
+def _xlsx_add_participantes(ws, headers: list[str], rows: list[list[str]]):
+    ws.append(headers)
+    # Ajustar anchos iniciales para primeras columnas
+    widths = [6, 28, 30, 20]
+    for idx, w in enumerate(widths, start=1):
+        try:
+            col_letter = ws.cell(row=1, column=idx).column_letter
+            ws.column_dimensions[col_letter].width = w
+        except Exception:
+            pass
+    # Resto
+    for c in range(len(widths) + 1, len(headers) + 1):
+        try:
+            col_letter = ws.cell(row=1, column=c).column_letter
+            ws.column_dimensions[col_letter].width = 18
+        except Exception:
+            pass
+    # Datos
+    for r in rows:
+        ws.append(r)
+    # Estilos: encabezado en negritas, borde y wrap
+    border = _xlsx_border_thin()
+    if Font:
+        for cell in ws[1]:
+            cell.font = Font(bold=True)
+    for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=len(headers)):
+        for cell in row:
+            if Alignment:
+                cell.alignment = Alignment(wrap_text=True, vertical='top')
+            if border:
+                cell.border = border
+    # Congelar encabezado
+    ws.freeze_panes = ws['A2']
+
+def _xlsx_http_response(filename_base: str, build_workbook_fn):
+    if Workbook is None:
+        return HttpResponse("openpyxl no está disponible en el entorno.", status=500)
+    wb = Workbook()
+    # El libro por defecto crea una hoja; la usaremos o la reemplazamos según fn
+    build_workbook_fn(wb)
+    from io import BytesIO
+    bio = BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    safe = slugify(filename_base) or "reporte"
+    now = timezone.localtime().strftime("%Y-%m-%d")
+    filename = f"{safe}_{now}.xlsx"
+    resp = HttpResponse(
+        bio.read(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    resp["Content-Disposition"] = f"attachment; filename=\"{filename}\""
+    return resp
+
+# Limpieza de descripciones HTML -> texto comprimido (una línea con espacios simples)
+def _clean_html_to_text(value: str | None) -> str:
+    if not value:
+        return "—"
+    try:
+        raw = strip_tags(value)
+    except Exception:
+        raw = value
+    # Normalizar espacios (incluye saltos de línea y tabs) a un solo espacio
+    text = re.sub(r"\s+", " ", raw or "").strip()
+    return text or "—"
 
 # -------------------
 # Helpers de acceso por congreso
@@ -199,8 +320,8 @@ def introduccion_view(request):
 # LOGIN
 # -------------------
 def login_view(request):
-    # Obtener congreso seleccionado por query (?c=ID) o por campo oculto del formulario
-    congreso_id = request.GET.get("c") or request.POST.get("c")
+    # Obtener congreso seleccionado por query (?c=ID), formulario o sesión (persistido por middleware)
+    congreso_id = request.GET.get("c") or request.POST.get("c") or request.session.get("congreso_id")
     selected_congreso = None
     if congreso_id:
         try:
@@ -288,14 +409,23 @@ def login_view(request):
 
                 # Login válido y fijar sesión
                 login(request, user)
+                # Persistir también en la sesión base para mantener contexto en rutas públicas
                 if chosen_id:
                     request.session["participant_active_congreso_id"] = chosen_id
-                return redirect("inicio_participante")
+                    request.session["congreso_id"] = chosen_id
+                # Si hay congreso seleccionado, mantenerlo al redirigir
+                dest = reverse("inicio_participante")
+                if selected_congreso:
+                    return redirect(f"{dest}?c={selected_congreso.id}")
+                return redirect(dest)
 
             # Resto de roles: login normal
             login(request, user)
-            return redirect("inicio")  # por defecto administradores
-            return redirect("inicio")  # por defecto administradores
+            # Si hay congreso en contexto, mantén el parámetro en el redirect
+            dest = reverse("inicio")
+            if selected_congreso:
+                return redirect(f"{dest}?c={selected_congreso.id}")
+            return redirect(dest)  # por defecto administradores
         else:
             messages.error(request, "Usuario o contraseña incorrectos.")
         return render(request, "login.html", {"selected_congreso": selected_congreso})
@@ -307,8 +437,8 @@ def login_view(request):
 # REGISTRO
 # -------------------
 def registro_view(request):
-    # Congreso seleccionado para mostrar logo en registro
-    congreso_id = request.GET.get("c") or request.POST.get("c")
+    # Congreso seleccionado para mostrar logo en registro (query, form o sesión)
+    congreso_id = request.GET.get("c") or request.POST.get("c") or request.session.get("congreso_id")
     selected_congreso = None
     if congreso_id:
         try:
@@ -546,7 +676,9 @@ def registro_view(request):
 
         messages.success(request, "Cuenta creada. Inicia sesión para continuar.")
         login_url = reverse("login")
+        # Mantener el contexto del congreso al redirigir al login
         if selected_congreso:
+            request.session["congreso_id"] = selected_congreso.id
             return redirect(f"{login_url}?c={selected_congreso.id}")
         return redirect(login_url)
 
@@ -803,6 +935,8 @@ def inicio_participante_view(request):
     concurso_insc = None
     conferencia_insc = None
     talleres_inscritos = []
+    concursos_inscritos = []
+    conferencias_inscritas = []
     if approved and congreso:
         taller_insc = (
             TallerInscripcion.objects
@@ -865,7 +999,7 @@ def inicio_participante_view(request):
 
 
 @login_required
-def participante_base_context(request):
+def participante_base_context(request, allow_unregistered: bool = False):
     """Devuelve contexto base (congreso, approved, labels) para vistas de participantes.
 
     Nota: Permite acceso aunque la membresía esté pendiente o rechazada; 
@@ -892,8 +1026,11 @@ def participante_base_context(request):
         )
         # Si el usuario no está registrado en el congreso activo, bloquear acceso con aviso
         if congreso and membership is None:
-            messages.warning(request, f"No estás registrado en '{congreso.name}'. Regístrate para acceder.")
-            return None
+            if not allow_unregistered:
+                messages.warning(request, f"No estás registrado en '{congreso.name}'. Regístrate para acceder.")
+                return None
+            # Permitir acceso limitado (p.ej., Avisos) sin membresía
+            membership = None
     if not congreso:
         membership = (
             UserCongresoMembership.objects
@@ -906,6 +1043,15 @@ def participante_base_context(request):
     approved = status == "approved"
     status_label_map = {"pending": "Pendiente de Activación", "approved": "Aprobado", "rejected": "Rechazado", "none": ""}
     status_label = status_label_map.get(status, "")
+    # Calcular avisos nuevos respecto a la última visita a Avisos (fallback al último login si no existe)
+    last_seen_str = request.session.get("avisos_last_seen_at")
+    last_seen_dt = parse_datetime(last_seen_str) if last_seen_str else None
+    if not last_seen_dt:
+        last_seen_dt = getattr(request.user, "last_login", None) or timezone.make_aware(datetime.min)
+    avisos_new_count = (
+        Aviso.objects.filter(congreso=congreso, created_at__gt=last_seen_dt).count()
+        if congreso else 0
+    )
 
     return {
         "congreso": congreso,
@@ -917,7 +1063,41 @@ def participante_base_context(request):
         "talleres_url": reverse("part_talleres"),
         "concursos_url": reverse("part_concursos"),
         "conferencias_url": reverse("part_conferencias"),
+        "avisos_url": reverse("part_avisos"),
+        # Avisos nuevos desde la última visita a 'Avisos'
+        "avisos_new_count": avisos_new_count,
     }
+
+
+@login_required
+def part_avisos_view(request):
+    """Avisos para participantes: accesible incluso con membresía pendiente o rechazada.
+
+    Usa el contexto base sin exigir `approved` y lista avisos del congreso actual.
+    """
+    ctx = participante_base_context(request, allow_unregistered=True)
+    if ctx is None:
+        return redirect("inicio")
+    congreso = ctx.get("congreso")
+    # Calcular cantidad de avisos nuevos en base a la última visita guardada
+    last_seen_str = request.session.get("avisos_last_seen_at")
+    last_seen_dt = parse_datetime(last_seen_str) if last_seen_str else None
+    if not last_seen_dt:
+        last_seen_dt = getattr(request.user, "last_login", None) or timezone.make_aware(datetime.min)
+    new_count = (
+        Aviso.objects.filter(congreso=congreso, created_at__gt=last_seen_dt).count()
+        if congreso else 0
+    )
+    # Actualizar la marca de última visita a ahora
+    try:
+        request.session["avisos_last_seen_at"] = timezone.now().isoformat()
+    except Exception:
+        pass
+    avisos = []
+    if congreso:
+        avisos = list(Aviso.objects.filter(congreso=congreso).order_by("-created_at"))
+    ctx.update({"avisos": avisos, "avisos_new_count": new_count})
+    return render(request, "participantes_vista/part_avisos.html", ctx)
 
 
 @login_required
@@ -960,6 +1140,7 @@ def part_concursos_view(request):
     concursos = []
     concursos_inscritos = []
     inscritos_count_concursos = 0
+    reached_max_concursos = False
     if congreso:
         concursos = list(
             Concurso.objects
@@ -993,7 +1174,7 @@ def part_concursos_view(request):
         "concursos_inscritos": concursos_inscritos,
         "inscritos_count_concursos": inscritos_count_concursos,
         "max_concursos_por_participante": getattr(congreso, "concursos_por_participante", None) if congreso else None,
-            "reached_max_concursos": reached_max_concursos,
+        "reached_max_concursos": reached_max_concursos,
     })
     return render(request, "participantes_vista/part_concursos.html", ctx)
 
@@ -3224,6 +3405,8 @@ def usuario_editar_participante_view(request, congreso_id: int, membership_id: i
 
     if request.method == "POST":
         first_name = (request.POST.get("first_name") or "").strip()
+        apellido_paterno = (request.POST.get("apellido_paterno") or "").strip()
+        apellido_materno = (request.POST.get("apellido_materno") or "").strip()
         email = (request.POST.get("email") or "").strip()
         password = request.POST.get("password") or ""
         performance_level_id = request.POST.get("performance_level_id")
@@ -3245,10 +3428,7 @@ def usuario_editar_participante_view(request, congreso_id: int, membership_id: i
                     # actualizar usuario
                     user = membership.user
                     user.first_name = first_name or user.first_name
-                    if apellido_paterno or apellido_materno:
-                        combined_last = f"{apellido_paterno} {apellido_materno}".strip()
-                        user.last_name = combined_last or user.last_name
-                    # actualizar apellidos combinados en last_name
+                    # actualizar apellidos combinados en last_name (si se enviaron)
                     if apellido_paterno or apellido_materno:
                         combined_last = f"{apellido_paterno} {apellido_materno}".strip()
                         user.last_name = combined_last or user.last_name
@@ -3345,6 +3525,9 @@ def usuario_editar_instructores_view(request, congreso_id: int, membership_id: i
 
     if request.method == "POST":
         first_name = (request.POST.get("first_name") or "").strip()
+        # Capturar apellidos separados para combinarlos en last_name
+        apellido_paterno = (request.POST.get("apellido_paterno") or "").strip()
+        apellido_materno = (request.POST.get("apellido_materno") or "").strip()
         email = (request.POST.get("email") or "").strip()
         password = request.POST.get("password") or ""
 
@@ -3362,6 +3545,10 @@ def usuario_editar_instructores_view(request, congreso_id: int, membership_id: i
                 else:
                     user = membership.user
                     user.first_name = first_name or user.first_name
+                    # Actualizar apellidos combinando apellido paterno y materno en last_name si se proporcionan
+                    if apellido_paterno or apellido_materno:
+                        combined_last = f"{apellido_paterno} {apellido_materno}".strip()
+                        user.last_name = combined_last or user.last_name
                     if email and (user.username.lower() != email.lower()):
                         if not User.objects.exclude(pk=user.pk).filter(username__iexact=email).exists():
                             user.username = email
@@ -3448,6 +3635,147 @@ def congresos_eventos_view(request):
 
     congresos = list(Congreso.objects.all().order_by("name"))
     return render(request, "congresos_eventos.html", {"rol": rol, "congresos": congresos, "is_scoped_admin": False})
+
+
+@login_required
+def campos_view(request):
+    """Gestión de campos extra por congreso.
+
+    Soporta crear/editar/eliminar `ExtraField`. Incluye tipo de campo `select` con
+    `choices_text` para definir opciones (una por línea o separadas por comas).
+    """
+    # Selección de congreso por querystring ?c=ID (default: primero existente)
+    try:
+        cid_raw = (request.GET.get("c") or request.POST.get("congreso_id") or "").strip()
+        cid = int(cid_raw) if cid_raw else None
+    except ValueError:
+        cid = None
+
+    congreso = None
+    if cid:
+        congreso = Congreso.objects.filter(id=cid).first()
+    if not congreso:
+        congreso = Congreso.objects.order_by("name").first()
+    if not congreso:
+        messages.error(request, "Primero crea un evento/congreso antes de gestionar campos.")
+        return redirect("congresos_eventos")
+
+    # Seguridad básica: solo admins/congreso admins
+    deny = _ensure_congreso_access_or_redirect(request, congreso)
+    if deny:
+        return deny
+
+    edit_field = None
+    # Acciones POST
+    if request.method == "POST":
+        action = (request.POST.get("action") or "").strip()
+        if action == "add_field":
+            name = (request.POST.get("name") or "").strip()
+            role_scope = (request.POST.get("role_scope") or "both").strip()
+            required = bool(request.POST.get("required"))
+            active = bool(request.POST.get("active"))
+            unique_value = bool(request.POST.get("unique_value"))
+            field_type = (request.POST.get("field_type") or "text").strip()
+            choices_text = (request.POST.get("choices_text") or "").strip()
+            if not name:
+                messages.error(request, "El nombre del campo no puede estar vacío.")
+            else:
+                code = slugify(name)[:220]
+                # Evitar colisión de code por congreso
+                base_code = code or f"campo-{timezone.now().timestamp()}"
+                code = base_code
+                suffix = 1
+                while ExtraField.objects.filter(congreso=congreso, code=code).exists():
+                    code = f"{base_code}-{suffix}"
+                    suffix += 1
+                try:
+                    ef = ExtraField.objects.create(
+                        congreso=congreso,
+                        name=name,
+                        code=code,
+                        field_type=field_type if field_type in {"text","number","date","boolean","select","email"} else "text",
+                        role_scope=role_scope if role_scope in {"both","participante","instructor"} else "both",
+                        required=required,
+                        active=active,
+                        unique_value=unique_value,
+                        choices_text=choices_text if field_type == "select" else "",
+                    )
+                except Exception as e:
+                    messages.error(request, f"No se pudo crear el campo: {e}")
+                else:
+                    messages.success(request, "Campo creado.")
+            return redirect(f"{reverse('campos')}?c={congreso.id}")
+
+        if action == "update_field":
+            fid = request.POST.get("field_id")
+            try:
+                ef = ExtraField.objects.get(id=fid, congreso=congreso)
+            except ExtraField.DoesNotExist:
+                messages.error(request, "El campo a actualizar no existe.")
+            else:
+                name = (request.POST.get("name") or "").strip()
+                role_scope = (request.POST.get("role_scope") or "both").strip()
+                required = bool(request.POST.get("required"))
+                active = bool(request.POST.get("active"))
+                unique_value = bool(request.POST.get("unique_value"))
+                field_type = (request.POST.get("field_type") or ef.field_type).strip()
+                choices_text = (request.POST.get("choices_text") or "").strip()
+                if not name:
+                    messages.error(request, "El nombre del campo no puede estar vacío.")
+                else:
+                    ef.name = name
+                    ef.role_scope = role_scope if role_scope in {"both","participante","instructor"} else ef.role_scope
+                    ef.required = required
+                    ef.active = active
+                    ef.unique_value = unique_value
+                    ef.field_type = field_type if field_type in {"text","number","date","boolean","select","email"} else ef.field_type
+                    ef.choices_text = choices_text if ef.field_type == "select" else ""
+                    try:
+                        ef.save()
+                    except Exception as e:
+                        messages.error(request, f"No se pudo actualizar el campo: {e}")
+                    else:
+                        messages.success(request, "Campo actualizado.")
+            return redirect(f"{reverse('campos')}?c={congreso.id}")
+
+        if action == "delete_field":
+            fid = request.POST.get("field_id")
+            ef = ExtraField.objects.filter(id=fid, congreso=congreso).first()
+            if not ef:
+                messages.error(request, "El campo a eliminar no existe.")
+            else:
+                try:
+                    ef.delete()
+                except Exception as e:
+                    messages.error(request, f"No se pudo eliminar el campo: {e}")
+                else:
+                    messages.success(request, "Campo eliminado.")
+            return redirect(f"{reverse('campos')}?c={congreso.id}")
+
+    # GET: listado + posible edición
+    edit_id = request.GET.get("edit")
+    if edit_id:
+        edit_field = ExtraField.objects.filter(id=edit_id, congreso=congreso).first()
+
+    fields = list(ExtraField.objects.filter(Q(congreso=congreso) | Q(congreso__isnull=True), section="registro").order_by("order", "name"))
+    congresos = list(Congreso.objects.all().order_by("name"))
+
+    grupos = request.user.groups.values_list("name", flat=True)
+    if "Instructores" in grupos:
+        rol = "Instructor"
+    elif "Participantes" in grupos:
+        rol = "Participante"
+    else:
+        rol = "Administrador"
+
+    ctx = {
+        "rol": rol,
+        "congreso": congreso,
+        "congresos": congresos,
+        "fields": fields,
+        "edit_field": edit_field,
+    }
+    return render(request, "campos.html", ctx)
 
 
 @login_required
@@ -6850,6 +7178,74 @@ def taller_participantes_view(request, congreso_id: int, taller_id: int):
 
 
 @login_required
+def export_taller_excel_view(request, congreso_id: int, taller_id: int):
+    # Reutilizar la misma recolección de datos que la vista de participantes
+    try:
+        congreso = Congreso.objects.get(pk=congreso_id)
+    except Congreso.DoesNotExist:
+        messages.error(request, "El congreso solicitado no existe.")
+        return redirect("congresos_eventos")
+    guard = _ensure_congreso_access_or_redirect(request, congreso, allow_instructors=True)
+    if guard:
+        return guard
+    try:
+        taller = Taller.objects.get(pk=taller_id, congreso=congreso)
+    except Taller.DoesNotExist:
+        messages.error(request, "El taller solicitado no existe en este congreso.")
+        return redirect("talleres_list", congreso.id)
+
+    inscripciones = (
+        TallerInscripcion.objects
+        .filter(congreso=congreso, taller=taller)
+        .select_related("user", "performance_level")
+        .order_by("user__first_name", "user__username")
+    )
+    extra_fields = ExtraField.objects.filter(active=True).filter(
+        Q(congreso=congreso) | Q(congreso__isnull=True)
+    ).filter(role_scope__in=["both", "participante"]).order_by("order", "name")
+    user_ids = list(inscripciones.values_list("user_id", flat=True))
+    extra_vals = (
+        UserExtraFieldValue.objects
+        .filter(congreso=congreso, user_id__in=user_ids, field__in=extra_fields)
+        .select_related("field")
+    )
+    extra_map = {}
+    for v in extra_vals:
+        extra_map.setdefault(v.user_id, {})[v.field_id] = v.value or "—"
+
+    def build_wb(wb):
+        # Resumen
+        ws_res = wb.active
+        ws_res.title = "Resumen"
+        desc_line = _clean_html_to_text(getattr(taller, "description", None))
+        instr_name = taller.instructor.get_full_name() or taller.instructor.username if getattr(taller, "instructor", None) else "—"
+        pairs = [
+            ("Congreso", congreso.name or ""),
+            ("Taller", taller.title or ""),
+            ("Descripción", desc_line),
+            ("Instructor", instr_name),
+            ("Lugar", taller.lugar or "—"),
+            ("Fecha de generación", timezone.localtime().strftime("%Y-%m-%d %H:%M")),
+        ]
+        _xlsx_add_resumen(ws_res, pairs)
+
+        # Participantes
+        ws = wb.create_sheet("Participantes")
+        headers = ["#", "Nombre", "Correo", "Nivel de desempeño"] + [f.name for f in extra_fields]
+        rows = []
+        for idx, ins in enumerate(inscripciones, start=1):
+            u = ins.user
+            nombre = (u.get_full_name() or u.username)
+            correo = (u.email or "—")
+            nivel = (ins.performance_level.name if ins.performance_level else "—")
+            extras = [extra_map.get(u.id, {}).get(f.id, "—") for f in extra_fields]
+            rows.append([str(idx), nombre, correo, nivel, *extras])
+        _xlsx_add_participantes(ws, headers, rows)
+
+    return _xlsx_http_response(f"participantes_taller_{taller.title}", build_wb)
+
+
+@login_required
 def concurso_participantes_view(request, congreso_id: int, concurso_id: int):
     try:
         congreso = Congreso.objects.get(pk=congreso_id)
@@ -7221,6 +7617,129 @@ def concurso_participantes_view(request, congreso_id: int, concurso_id: int):
 
 
 @login_required
+def export_concurso_excel_view(request, congreso_id: int, concurso_id: int):
+    try:
+        congreso = Congreso.objects.get(pk=congreso_id)
+    except Congreso.DoesNotExist:
+        messages.error(request, "El congreso solicitado no existe.")
+        return redirect("congresos_eventos")
+    guard = _ensure_congreso_access_or_redirect(request, congreso, allow_instructors=True)
+    if guard:
+        return guard
+    try:
+        concurso = Concurso.objects.get(pk=concurso_id, congreso=congreso)
+    except Concurso.DoesNotExist:
+        messages.error(request, "El concurso solicitado no existe en este congreso.")
+        return redirect("concursos_list", congreso.id)
+
+    inscripciones = (
+        ConcursoInscripcion.objects
+        .filter(congreso=congreso, concurso=concurso)
+        .select_related("user", "performance_level")
+        .order_by("user__first_name", "user__last_name", "user__username")
+    )
+    extra_fields = ExtraField.objects.filter(active=True).filter(
+        Q(congreso=congreso) | Q(congreso__isnull=True)
+    ).filter(role_scope__in=["both", "participante"]).order_by("order", "name")
+    user_ids = list(inscripciones.values_list("user_id", flat=True))
+    extra_vals = (
+        UserExtraFieldValue.objects
+        .filter(congreso=congreso, user_id__in=user_ids, field__in=extra_fields)
+        .select_related("field")
+    )
+    extra_map = {}
+    for v in extra_vals:
+        extra_map.setdefault(v.user_id, {})[v.field_id] = v.value or "—"
+
+    # Para concursos grupales, obtener el equipo por usuario
+    team_by_user: dict[int, str] = {}
+    if concurso.type == "grupal" and user_ids:
+        membs = (
+            ConcursoEquipoMiembro.objects
+            .filter(equipo__concurso=concurso, user_id__in=user_ids)
+            .select_related("equipo")
+        )
+        for m in membs:
+            team_by_user[m.user_id] = m.equipo.nombre
+
+    def build_wb(wb):
+        # Resumen
+        ws_res = wb.active
+        ws_res.title = "Resumen"
+        desc_line = _clean_html_to_text(getattr(concurso, "description", None))
+        instr_name = concurso.instructor.get_full_name() or concurso.instructor.username if getattr(concurso, "instructor", None) else "—"
+        tipo_label = "Grupal" if concurso.type == "grupal" else "Individual"
+        pairs = [
+            ("Congreso", congreso.name or ""),
+            ("Concurso", concurso.title or ""),
+            ("Descripción", desc_line),
+            ("Instructor", instr_name),
+            ("Lugar", concurso.lugar or "—"),
+            ("Tipo", tipo_label),
+            ("Fecha de generación", timezone.localtime().strftime("%Y-%m-%d %H:%M")),
+        ]
+        _xlsx_add_resumen(ws_res, pairs)
+
+        # Participantes
+        ws = wb.create_sheet("Participantes")
+        base_headers = ["#", "Nombre", "Correo", "Nivel de desempeño"]
+        if concurso.type == "grupal":
+            base_headers.append("Equipo")
+        headers = base_headers + [f.name for f in extra_fields]
+        rows = []
+
+        if concurso.type == "grupal":
+            # Construir filas agrupadas por equipo y enumeradas por equipo
+            ins_by_user = {i.user_id: i for i in inscripciones}
+            equipos = (
+                ConcursoEquipo.objects.filter(concurso=concurso)
+                .prefetch_related("miembros__user")
+                .order_by("nombre")
+            )
+            seen = set()
+            for eq in equipos:
+                miembros = list(eq.miembros.select_related("user"))
+                miembros.sort(key=lambda m: ((m.user.first_name or m.user.username), (m.user.last_name or "")))
+                # Enumeración por equipo inicia en 1
+                for idx, m in enumerate(miembros, start=1):
+                    ins = ins_by_user.get(m.user_id)
+                    if not ins:
+                        continue
+                    seen.add(m.user_id)
+                    u = ins.user
+                    nombre = (u.get_full_name() or u.username)
+                    correo = (u.email or "—")
+                    nivel = (ins.performance_level.name if ins.performance_level else "—")
+                    extras = [extra_map.get(u.id, {}).get(f.id, "—") for f in extra_fields]
+                    rows.append([str(idx), nombre, correo, nivel, eq.nombre, *extras])
+            # Huérfanos (sin equipo), al final, enumeración propia
+            orphans = [i for i in inscripciones if i.user_id not in seen]
+            orphans.sort(key=lambda ins: ((ins.user.first_name or ins.user.username), (ins.user.last_name or "")))
+            for idx, ins in enumerate(orphans, start=1):
+                u = ins.user
+                nombre = (u.get_full_name() or u.username)
+                correo = (u.email or "—")
+                nivel = (ins.performance_level.name if ins.performance_level else "—")
+                extras = [extra_map.get(u.id, {}).get(f.id, "—") for f in extra_fields]
+                rows.append([str(idx), nombre, correo, nivel, "Sin equipo", *extras])
+        else:
+            # Individual: enumeración global según orden por nombre
+            ordered = list(inscripciones)
+            ordered.sort(key=lambda ins: ((ins.user.first_name or ins.user.username), (ins.user.last_name or "")))
+            for idx, ins in enumerate(ordered, start=1):
+                u = ins.user
+                nombre = (u.get_full_name() or u.username)
+                correo = (u.email or "—")
+                nivel = (ins.performance_level.name if ins.performance_level else "—")
+                extras = [extra_map.get(u.id, {}).get(f.id, "—") for f in extra_fields]
+                rows.append([str(idx), nombre, correo, nivel, *extras])
+
+        _xlsx_add_participantes(ws, headers, rows)
+
+    return _xlsx_http_response(f"participantes_concurso_{concurso.title}", build_wb)
+
+
+@login_required
 def conferencia_participantes_view(request, congreso_id: int, conferencia_id: int):
     try:
         congreso = Congreso.objects.get(pk=congreso_id)
@@ -7338,6 +7857,73 @@ def conferencia_participantes_view(request, congreso_id: int, conferencia_id: in
     ctx.update({"rol": rol})
     ctx["is_scoped_admin"] = bool(_get_scoped_congreso_for_group_admin(request.user))
     return render(request, "conferencia_accion/conferencia_participantes.html", ctx)
+
+
+@login_required
+def export_conferencia_excel_view(request, congreso_id: int, conferencia_id: int):
+    try:
+        congreso = Congreso.objects.get(pk=congreso_id)
+    except Congreso.DoesNotExist:
+        messages.error(request, "El congreso solicitado no existe.")
+        return redirect("congresos_eventos")
+    guard = _ensure_congreso_access_or_redirect(request, congreso, allow_instructors=True)
+    if guard:
+        return guard
+    try:
+        conferencia = Conferencia.objects.get(pk=conferencia_id, congreso=congreso)
+    except Conferencia.DoesNotExist:
+        messages.error(request, "La conferencia solicitada no existe en este congreso.")
+        return redirect("conferencias_list", congreso.id)
+
+    inscripciones = (
+        ConferenciaInscripcion.objects
+        .filter(congreso=congreso, conferencia=conferencia)
+        .select_related("user", "performance_level")
+        .order_by("user__first_name", "user__last_name", "user__username")
+    )
+    extra_fields = ExtraField.objects.filter(active=True).filter(
+        Q(congreso=congreso) | Q(congreso__isnull=True)
+    ).filter(role_scope__in=["both", "participante"]).order_by("order", "name")
+    user_ids = list(inscripciones.values_list("user_id", flat=True))
+    extra_vals = (
+        UserExtraFieldValue.objects
+        .filter(congreso=congreso, user_id__in=user_ids, field__in=extra_fields)
+        .select_related("field")
+    )
+    extra_map = {}
+    for v in extra_vals:
+        extra_map.setdefault(v.user_id, {})[v.field_id] = v.value or "—"
+
+    def build_wb(wb):
+        # Resumen
+        ws_res = wb.active
+        ws_res.title = "Resumen"
+        desc_line = _clean_html_to_text(getattr(conferencia, "description", None))
+        instr_name = conferencia.instructor.get_full_name() or conferencia.instructor.username if getattr(conferencia, "instructor", None) else "—"
+        pairs = [
+            ("Congreso", congreso.name or ""),
+            ("Conferencia", conferencia.title or ""),
+            ("Descripción", desc_line),
+            ("Instructor", instr_name),
+            ("Lugar", conferencia.lugar or "—"),
+            ("Fecha de generación", timezone.localtime().strftime("%Y-%m-%d %H:%M")),
+        ]
+        _xlsx_add_resumen(ws_res, pairs)
+
+        # Participantes
+        ws = wb.create_sheet("Participantes")
+        headers = ["#", "Nombre", "Correo", "Nivel de desempeño"] + [f.name for f in extra_fields]
+        rows = []
+        for idx, ins in enumerate(inscripciones, start=1):
+            u = ins.user
+            nombre = (u.get_full_name() or u.username)
+            correo = (u.email or "—")
+            nivel = (ins.performance_level.name if ins.performance_level else "—")
+            extras = [extra_map.get(u.id, {}).get(f.id, "—") for f in extra_fields]
+            rows.append([str(idx), nombre, correo, nivel, *extras])
+        _xlsx_add_participantes(ws, headers, rows)
+
+    return _xlsx_http_response(f"participantes_conferencia_{conferencia.title}", build_wb)
 
 
 @login_required

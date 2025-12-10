@@ -20,13 +20,23 @@
     html,body{height:100%}
     body{
       margin:0; font-family:'Inter', system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial, sans-serif; color:var(--text);
-      background: radial-gradient(60% 60% at 20% 10%, rgba(14,165,233,.35) 0%, rgba(14,165,233,0) 60%),
-                  radial-gradient(50% 50% at 90% 0%, rgba(59,130,246,.35) 0%, rgba(59,130,246,0) 50%),
-                  linear-gradient(180deg, var(--bg-3) 0%, #0b1220 100%);
+      background:
+        linear-gradient(rgba(2,6,23,.55), rgba(2,6,23,.55)),
+        url('{% static 'base/img/introduccion.jpeg' %}') center/cover no-repeat,
+        radial-gradient(60% 60% at 20% 10%, rgba(14,165,233,.35) 0%, rgba(14,165,233,0) 60%),
+        radial-gradient(50% 50% at 90% 0%, rgba(59,130,246,.35) 0%, rgba(59,130,246,0) 50%),
+        linear-gradient(180deg, var(--bg-3) 0%, #0b1220 100%);
+      background-attachment: fixed, fixed, scroll, scroll, scroll;
       min-height:100vh; display:flex; flex-direction:column;
     }
-    .hero{position:relative; padding:72px 20px 36px; text-align:center;}
-    .hero .logo-corner{position:absolute; top:8px; left:16px; height:72px; width:auto; filter:drop-shadow(0 6px 16px rgba(0,0,0,.4))}
+    .hero{position:relative; padding:32px 20px 24px; text-align:center;}
+    .hero .logo-corner{position:absolute; top:10px; left:18px; height:96px; width:auto; filter:drop-shadow(0 6px 16px rgba(0,0,0,.4));
+      background:linear-gradient(135deg, rgba(255,255,255,.85), rgba(248,250,252,.75));
+      border:1px solid rgba(226,232,240,.7);
+      border-radius:12px;
+      padding:8px 10px;
+      box-shadow:0 10px 24px rgba(0,0,0,.25);
+    }
     .hero h1{font-weight:800; letter-spacing:.4px; margin:0; font-size:clamp(1.4rem, 1.8vw + 1rem, 2.6rem)}
     .hero p{margin:10px auto 0; max-width:820px; color:var(--muted)}
     /* wave divider */
@@ -54,8 +64,8 @@
 <body>
   <header class="hero">
     <img class="logo-corner" src="{% static 'base/img/SAEC.png' %}?v=2" alt="SAEC"/>
-    <h1>SISTEMA DE ADMINISTRACIÓN DE EVENTOS Y CONGRESOS (SAEC)</h1>
-    <p>Una plataforma moderna para gestionar congresos, talleres, conferencias y concursos con límites por participante, roles y flujos claros para administradores e instructores.</p>
+    <h1>Sistema de Administración de Eventos y Congresos</h1>
+    <p>“Organiza más, preocúpate menos.”</p>
     <div class="wave"></div>
   </header>
 
@@ -64,17 +74,38 @@
       <section class="card">
         <div class="badge">Misión</div>
         <h3>Nuestro propósito</h3>
-        <p>Facilitar la organización y participación en eventos académicos con una experiencia simple, segura y accesible para todas las personas.</p>
+        <p>Desarrollar una plataforma tecnológica eficiente y confiable que facilite la organización de eventos académicos y profesionales, permitiendo gestionar ágilmente registros, control de participantes y generación de listas, brindando una experiencia rápida y ordenada para organizadores y usuarios.</p>
       </section>
       <section class="card">
         <div class="badge">Visión</div>
         <h3>Hacia dónde vamos</h3>
-        <p>Ser la solución de referencia en instituciones educativas para la gestión integral de congresos y eventos, impulsando colaboración e innovación.</p>
+        <p>Convertirnos en el sistema líder para la administración de eventos, congresos y actividades académicas a nivel institucional, reconocidos por nuestra innovación, facilidad de uso y capacidad para mejorar la planeación, el control y la experiencia de participación.</p>
       </section>
       <section class="card">
-        <div class="badge">Sistema</div>
-        <h3>Lo importante</h3>
-        <p>Inscripciones con cupos por persona configurables, manejo de talleres, conferencias y concursos, equipos, perfiles y mensajería contextual en todo el flujo.</p>
+        <div class="badge">Objetivo</div>
+        <h3>Lo que buscamos</h3>
+        <p>Proporcionar una solución integral que automatice y simplifique inscripciones, registro y control de estudiantes y participantes, reduciendo tiempos administrativos y mejorando la eficiencia en la organización de eventos académicos y profesionales.</p>
+      </section>
+    </div>
+
+    <div class="grid" style="margin-top:18px;">
+      <section class="card" style="grid-column:1/-1;">
+        <div class="badge">Quiénes Somos</div>
+        <h3>Sobre SAEC</h3>
+        <p>Somos SAEC (Sistema de Administración de Eventos y Congresos), una plataforma moderna diseñada para optimizar la gestión de eventos y congresos, permitiendo administrar talleres, conferencias y concursos. Ayudamos a organizadores, instructores y administradores a mantener un control eficiente de participantes, automatizar registros y generar listas y certificados en PDF. SAEC es una solución integral para instituciones académicas y organizaciones que buscan mejorar tiempos de respuesta, agilizar procesos y ofrecer una experiencia clara, ordenada y accesible para alumnos y asistentes.</p>
+      </section>
+      <section class="card" style="grid-column:1/-1;">
+        <div class="badge">Valores</div>
+        <h3>Lo que nos guía</h3>
+        <p class="mb-2">Estos principios orientan nuestro trabajo y decisiones:</p>
+        <ul class="m-0" style="padding-left:18px; color:#d1e0ff;">
+          <li>✅ <strong>Eficiencia:</strong> Optimizamos procesos para reducir tiempos y mejorar la administración.</li>
+          <li>✅ <strong>Organización:</strong> Ofrecemos flujos claros y herramientas precisas para una gestión ordenada.</li>
+          <li>✅ <strong>Innovación:</strong> Desarrollamos soluciones tecnológicas modernas para el ámbito académico y organizacional.</li>
+          <li>✅ <strong>Confiabilidad:</strong> Garantizamos información segura, procesos claros y resultados precisos (listas y certificados).</li>
+          <li>✅ <strong>Servicio:</strong> Priorizamos la experiencia de alumnos, instructores y administradores con una plataforma intuitiva.</li>
+          <li>✅ <strong>Responsabilidad:</strong> Actuamos con profesionalismo, respuestas rápidas y cumplimiento en cada función.</li>
+        </ul>
       </section>
     </div>
 
@@ -88,4 +119,65 @@
 
   <footer>&copy; {% now "Y" %} SAEC</footer>
 </body>
+<script>
+  // Parallax suave: mueve el fondo al desplazarse
+  (function(){
+    var ticking = false;
+    var maxShift = 0; // límite para que no se mueva fuera del fondo visible
+    var imgRatio = 1; // ancho/alto de la imagen
+    var baseOffset = -140; // subir más la imagen para ver mayor área inferior
+
+    function computeMaxShift(){
+      var vw = window.innerWidth;
+      var vh = window.innerHeight;
+      // Para 'cover': la imagen se escala para cubrir ambos ejes
+      // Si vw/vh > imgRatio => la altura renderizada = vw * (1/imgRatio)
+      // Si no => la altura renderizada = vh
+      var viewportRatio = vw / vh;
+      var renderedHeight;
+      if(viewportRatio > imgRatio){
+        renderedHeight = vw / imgRatio;
+      } else {
+        // Cuando la altura manda en 'cover', el alto coincide con el alto del viewport
+        renderedHeight = vh;
+      }
+      // El movimiento máximo útil es la diferencia entre alto renderizado y viewport
+      // Lo dividimos entre 2 para permitir desplazamiento simétrico arriba/abajo
+      var diff = Math.max(0, renderedHeight - vh);
+      maxShift = Math.round(diff / 2);
+    }
+
+    function setParallax(y){
+      var raw = Math.round(y * 0.25); // velocidad del parallax
+      // Limitar movimiento al rango [-maxShift, maxShift]
+      var desired = raw + baseOffset;
+      var shift = Math.max(-maxShift, Math.min(maxShift, desired));
+      document.body.style.backgroundPosition = 'center center, center ' + shift + 'px, 20% 10%, 90% 0%, center';
+    }
+
+    function onScroll(){
+      if(ticking) return; ticking = true;
+      window.requestAnimationFrame(function(){
+        var y = window.scrollY || document.documentElement.scrollTop || 0;
+        setParallax(y);
+        ticking = false;
+      });
+    }
+
+    // Precargar la imagen para conocer su proporción real
+    (function preload(){
+      var img = new Image();
+      img.onload = function(){
+        // relación ancho/alto
+        imgRatio = img.naturalWidth / img.naturalHeight;
+        computeMaxShift();
+        onScroll();
+      };
+      img.src = "{% static 'base/img/introduccion.jpeg' %}";
+    })();
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', function(){ computeMaxShift(); onScroll(); });
+  })();
+</script>
 </html>

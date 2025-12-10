@@ -14,8 +14,19 @@
     <a {% if approved %}href="{{ concursos_url }}"{% else %}class="disabled-nav" aria-disabled="true" tabindex="-1"{% endif %}{% if curr in 'part_concursos,part_concurso_inscribir' %} aria-current="page"{% endif %}>Concursos</a>
     <a {% if approved %}href="{{ conferencias_url }}"{% else %}class="disabled-nav" aria-disabled="true" tabindex="-1"{% endif %}{% if curr in 'part_conferencias,part_conferencia_inscribir' %} aria-current="page"{% endif %}>Conferencias</a>
   {% endif %}
-  {# Avisos y Perfil ahora también bloqueados si la membresía no está aprobada #}
-  <a {% if approved %}href="{% url 'part_avisos' %}"{% else %}class="disabled-nav" aria-disabled="true" tabindex="-1"{% endif %}{% if curr == 'part_avisos' %} aria-current="page"{% endif %}>Avisos</a>
+  {# Avisos: accesible incluso si la membresía está pendiente o rechazada #}
+  <a href="{% url 'part_avisos' %}"{% if curr == 'part_avisos' %} aria-current="page"{% endif %}>
+    Avisos
+    {% if avisos_new_count and avisos_new_count > 0 %}
+      {% with display_count=avisos_new_count|default:0 %}
+        {% if display_count > 9 %}
+          <span class="badge-avisos" aria-label="{{ display_count }} avisos nuevos">9+</span>
+        {% else %}
+          <span class="badge-avisos" aria-label="{{ display_count }} avisos nuevos">{{ display_count }}</span>
+        {% endif %}
+      {% endwith %}
+    {% endif %}
+  </a>
   <a {% if approved %}href="{% url 'part_perfil' %}"{% else %}class="disabled-nav" aria-disabled="true" tabindex="-1"{% endif %}{% if curr == 'part_perfil' %} aria-current="page"{% endif %}>Perfil</a>
   <a href="{% url 'logout' %}">Cerrar</a>
   {% endwith %}
@@ -53,6 +64,14 @@
   .nav-logo-link:hover .nav-logo{ transform: translateY(-1px) scale(1.03); box-shadow:0 6px 16px rgba(2,6,23,.12); }
   .disabled-nav{ pointer-events:none; opacity:.45; text-decoration:none; }
   .disabled-nav::after{ width:0!important; }
+
+  /* Badge para avisos nuevos */
+  .badge-avisos{
+    display:inline-block; margin-left:8px; min-width:20px; padding:2px 6px;
+    border-radius:999px; background:#ef4444; color:#fff; font-size:.75rem; line-height:1;
+    text-align:center; font-weight:700; box-shadow:0 2px 6px rgba(239,68,68,.35);
+    vertical-align:middle;
+  }
 
   /* Indicador deslizante global */
   .nav-indicator{

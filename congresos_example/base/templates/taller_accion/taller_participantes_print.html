@@ -6,9 +6,6 @@
   {% load static extra_filters %}
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/css/bootstrap.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.1/dist/js/bootstrap.bundle.min.js"></script>
-  <!-- ExcelJS (para estilos reales en XLSX) y FileSaver -->
-  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
   <style>
     @media print {
       .no-print { display: none !important; }
@@ -59,7 +56,7 @@
       ↑↓
     </button>
     <div class="ms-auto d-flex gap-2">
-      <button class="btn btn-secondary" type="button" onclick="downloadXlsx()">Descargar</button>
+      <a class="btn btn-secondary" href="{% url 'taller_export' congreso.id taller.id %}">Descargar</a>
       <button class="btn btn-dark" type="button" onclick="prepareSignaturesAndPrint()">Imprimir</button>
     </div>
   </div>
@@ -190,81 +187,6 @@
       }catch(e){ console.error(e); window.print(); }
     }
   </script>
-  <script>
-    function getSafeFilename(base){
-      const date = new Date();
-      const yyyy = date.getFullYear();
-      const mm = String(date.getMonth()+1).padStart(2,'0');
-      const dd = String(date.getDate()).padStart(2,'0');
-      const clean = String(base||'').replace(/[^\w\-\s]/g,'').replace(/\s+/g,'_');
-      return `${clean}_${yyyy}-${mm}-${dd}.xlsx`;
-    }
-
-    async function downloadXlsx(){
-      const wb = new ExcelJS.Workbook();
-      // Resumen
-      const wsRes = wb.addWorksheet('Resumen');
-      const resumen = [
-        ['Congreso', '{{ congreso.name|escapejs }}'],
-        ['Taller', '{{ taller.title|escapejs }}'],
-        ['Descripción', '{% if taller.description %}{{ taller.description|first_line|escapejs }}{% else %}—{% endif %}'],
-        ['Instructor', '{% if taller.instructor %}{{ taller.instructor.get_full_name|default:taller.instructor.username|escapejs }}{% else %}—{% endif %}'],
-        ['Lugar', '{% if taller.lugar %}{{ taller.lugar|escapejs }}{% else %}—{% endif %}'],
-        ['Fecha de generación', new Date().toLocaleString()]
-      ];
-      wsRes.addRows(resumen);
-      wsRes.columns = [{ width: 18 }, { width: 120 }];
-      // Estilos visibles en Resumen: bordes negros, ajuste y etiquetas en negritas
-      for(let r=1; r<=resumen.length; r++){
-        for(let c=1; c<=2; c++){
-          const cell = wsRes.getCell(r, c);
-          cell.alignment = { wrapText: true, vertical: 'top' };
-          cell.border = {
-            top: { style: 'thin', color: { argb: 'FF000000' } },
-            bottom: { style: 'thin', color: { argb: 'FF000000' } },
-            left: { style: 'thin', color: { argb: 'FF000000' } },
-            right: { style: 'thin', color: { argb: 'FF000000' } }
-          };
-          if (c === 1) cell.font = { bold: true };
-        }
-      }
-      // Participantes
-      const ws = wb.addWorksheet('Participantes', {views:[{state:'frozen', ySplit:1}]});
-      const table = document.getElementById('tabla');
-      let header = Array.from(table.querySelectorAll('thead th')).map(th => th.innerText.trim());
-      if (header[header.length-1] === 'Firma') { header = header.slice(0, -1); }
-      ws.addRow(header);
-      const rows = Array.from(table.querySelectorAll('tbody tr'));
-      rows.forEach(tr => {
-        let tds = Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim());
-        if (tds.length && header.length < tds.length) { tds = tds.slice(0, header.length); }
-        ws.addRow(tds);
-      });
-      // Column widths
-      const widths = [6, 28, 30, 20];
-      ws.columns = widths.concat(Array(Math.max(0, header.length - widths.length)).fill(18))
-        .map(w => ({ width: w }));
-      // Header bold
-      ws.getRow(1).eachCell(c => { c.font = { bold: true }; });
-      // Wrap/align and borders for all cells
-      const maxRow = ws.rowCount;
-      const maxCol = header.length;
-      for(let r=1; r<=maxRow; r++){
-        for(let c=1; c<=maxCol; c++){
-          const cell = ws.getCell(r, c);
-          cell.alignment = { wrapText: true, vertical: 'top' };
-          cell.border = {
-            top: { style: 'thin', color: { argb: 'FF000000' } },
-            bottom: { style: 'thin', color: { argb: 'FF000000' } },
-            left: { style: 'thin', color: { argb: 'FF000000' } },
-            right: { style: 'thin', color: { argb: 'FF000000' } }
-          };
-        }
-      }
-      const fname = getSafeFilename('participantes_taller_' + ('{{ taller.title|escapejs }}'));
-      const buf = await wb.xlsx.writeBuffer();
-      saveAs(new Blob([buf], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}), fname);
-    }
-  </script>
+  
 </body>
 </html>
