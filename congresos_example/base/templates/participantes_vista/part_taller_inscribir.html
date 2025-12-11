@@ -131,6 +131,11 @@
           <div>
             {% if ya_inscrito %}
               <span class="btn btn-success disabled" aria-disabled="true">Ya inscrito en este taller</span>
+              <form method="post" style="display:inline; margin-left:8px;">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="unenroll_taller" />
+                <button type="submit" class="btn btn-outline-danger">Desinscribirme</button>
+              </form>
             {% elif otro_taller_inscrito and max_talleres_por_participante|default:99 <= 1 %}
               <span class="btn btn-secondary disabled" aria-disabled="true">Ya inscrito en otro taller</span>
             {% elif max_talleres_por_participante and inscritos_count_talleres|default:0 >= max_talleres_por_participante %}
@@ -164,7 +169,7 @@
             </div>
           </div>
           <div class="det-col">
-            <div class="det-label">Área</div>
+            <div class="det-label">Lugar y Horario</div>
             <div class="det-value">{% if taller.lugar %}{{ taller.lugar }}{% else %}—{% endif %}</div>
           </div>
           <div class="det-col">

@@ -75,7 +75,7 @@
               {% else %}
                 <div><strong>Tipo:</strong> Grupal</div>
               {% endif %}
-              {% if c.lugar %}<div><strong>Lugar:</strong> {{ c.lugar }}</div>{% endif %}
+              {% if c.lugar %}<div><strong>Lugar y Horario:</strong> {{ c.lugar }}</div>{% endif %}
               {% if c.description %}<div class="desc-line">{{ c.description|first_line }}</div>{% endif %}
             </div>
             <div class="work-divider"></div>
@@ -90,7 +90,19 @@
                   {% endif %}
                 {% endif %}
               </div>
-              <span class="status-badge">Disponible</span>
+              {% if c.type == 'individual' %}
+                {% if c.cupo_maximo and c.inscritos_count|default:0 >= c.cupo_maximo %}
+                  <span class="status-badge" style="background:#ef4444;">No Disponible</span>
+                {% else %}
+                  <span class="status-badge">Disponible</span>
+                {% endif %}
+              {% else %}
+                {% if c.numero_equipos and c.equipos_inscritos is not None and c.equipos_inscritos >= c.numero_equipos %}
+                  <span class="status-badge" style="background:#ef4444;">No Disponible</span>
+                {% else %}
+                  <span class="status-badge">Disponible</span>
+                {% endif %}
+              {% endif %}
             </div>
             <div class="mt-2">
               {% with maxv=max_concursos_por_participante cnt=inscritos_count_concursos %}

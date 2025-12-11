@@ -43,7 +43,14 @@
   {% include 'partials/congreso_sidebar.html' %}
   <div class="main">
     {% include 'partials/congreso_topbar.html' %}
-    <section class="hero-banner"><h1 class="hero-title">Avisos</h1></section>
+    <section class="hero-banner">
+      <div class="container-fluid px-0">
+        <div class="d-flex align-items-center mb-2">
+          <img src="{% static 'base/img/avisos.png' %}" alt="Avisos" style="width:140px;height:140px;object-fit:contain;border-radius:50%;background:#ffffff;margin-right:20px;">
+          <h1 class="hero-title m-0" style="font-size:2.4rem;font-weight:800;">Avisos</h1>
+        </div>
+      </div>
+    </section>
     <div class="container-fluid" style="padding-left:0; padding-right:0;">
       <div class="table-wrapper">
         <div class="table-card">

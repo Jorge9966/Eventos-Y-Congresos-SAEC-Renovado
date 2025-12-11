@@ -66,7 +66,7 @@
                 <h2 class="work-title">{{ t.title }}</h2>
                 <div class="work-meta">
                   <div><strong>Instructor:</strong> {% if t.instructor %}{{ t.instructor.get_full_name|default:t.instructor.username }}{% else %}—{% endif %}</div>
-                  {% if t.lugar %}<div><strong>Lugar:</strong> {{ t.lugar }}</div>{% endif %}
+                  {% if t.lugar %}<div><strong>Lugar y Horario:</strong> {{ t.lugar }}</div>{% endif %}
                   {% if t.description %}<div class="desc-line">{{ t.description|first_line }}</div>{% endif %}
                 </div>
                 <div class="work-divider"></div>
@@ -78,7 +78,11 @@
                       {{ t.inscritos_count|default:0 }} participantes
                     {% endif %}
                   </div>
-                  <span class="status-badge">Disponible</span>
+                  {% if t.cupo_maximo and t.inscritos_count|default:0 >= t.cupo_maximo %}
+                    <span class="status-badge" style="background:#ef4444;">No Disponible</span>
+                  {% else %}
+                    <span class="status-badge">Disponible</span>
+                  {% endif %}
                 </div>
                 <div class="mt-2">
                   {% with maxv=max_talleres_por_participante cnt=inscritos_count_talleres %}

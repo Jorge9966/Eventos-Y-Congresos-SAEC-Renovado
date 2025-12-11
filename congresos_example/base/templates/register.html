@@ -109,7 +109,7 @@
         <div class="mb-3" id="performance_level_wrap">
           {% if levels %}
             <select name="performance_level_id" class="form-control">
-              <option value="">Selecciona tu nivel de desempeño</option>
+              <option value="">Selecciona tu Rol / Cargo / Semestre</option>
               {% for lvl in levels %}
                 <option value="{{ lvl.id }}" {% if post_values.performance_level_id|default:'' == lvl.id|stringformat:"s" %}selected{% endif %}>{{ lvl.name }}</option>
               {% endfor %}

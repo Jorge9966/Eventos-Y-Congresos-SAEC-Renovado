@@ -45,7 +45,10 @@
     {% include 'partials/congreso_topbar.html' %}
     <section class="hero-banner">
       <div class="container-fluid px-0">
-        <h1 class="hero-title">Instructores</h1>
+        <div class="d-flex align-items-center mb-2">
+          <img src="{% static 'base/img/instructor_admin.png' %}" alt="Instructores" style="width:140px;height:140px;object-fit:contain;border-radius:50%;background:#ffffff;margin-right:20px;">
+          <h1 class="hero-title m-0" style="font-size:2.4rem;font-weight:800;">Instructores</h1>
+        </div>
         <p class="text-white-50 mb-2">Las modificaciones se guardan automáticamente.</p>
         <div class="d-flex gap-2 mb-2 flex-wrap">
           <a href="{% url 'usuario_instructor_nuevo' congreso.id %}" class="btn btn-success" title="Registrar nuevo instructor" aria-label="Registrar nuevo instructor">

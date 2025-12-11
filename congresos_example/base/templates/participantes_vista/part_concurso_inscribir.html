@@ -136,6 +136,11 @@
           <div>
             {% if ya_inscrito %}
               <span class="btn btn-success disabled" aria-disabled="true">Ya inscrito en este concurso</span>
+              <form method="post" style="display:inline; margin-left:8px;">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="unenroll_concurso" />
+                <button type="submit" class="btn btn-outline-danger">Desinscribirme</button>
+              </form>
             {% elif reached_max_concursos %}
               <span class="btn btn-secondary disabled" aria-disabled="true">Has alcanzado tu máximo de concursos</span>
             {% elif not approved %}
@@ -173,7 +178,7 @@
             </div>
           </div>
           <div class="det-col">
-            <div class="det-label">Área</div>
+            <div class="det-label">Lugar y Horario</div>
             <div class="det-value">{% if concurso.lugar %}{{ concurso.lugar }}{% else %}—{% endif %}</div>
           </div>
           <div class="det-col">

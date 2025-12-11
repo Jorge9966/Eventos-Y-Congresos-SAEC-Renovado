@@ -1222,7 +1222,7 @@ def part_taller_inscribir_view(request, taller_id: int):
     except Taller.DoesNotExist:
         messages.error(request, "El taller solicitado no existe en este congreso.")
         return redirect("part_talleres")
-    # Manejo de inscripción (POST)
+    # Manejo de inscripción / desinscripción (POST)
     if request.method == "POST" and request.POST.get("action") == "enroll_taller":
         # Validar aprobación de membresía
         if not ctx.get("approved"):
@@ -1255,6 +1255,15 @@ def part_taller_inscribir_view(request, taller_id: int):
             performance_level=perf,
         )
         messages.success(request, f"Te has inscrito al taller '{taller.title}'.", extra_tags="taller")
+        return redirect("inicio_participante")
+    if request.method == "POST" and request.POST.get("action") == "unenroll_taller":
+        # Eliminar la inscripción del usuario si existe
+        ins_qs = TallerInscripcion.objects.filter(congreso=congreso, taller=taller, user=request.user)
+        if ins_qs.exists():
+            ins_qs.delete()
+            messages.error(request, f"Has sido borrado del taller '{taller.title}'.", extra_tags="taller")
+        else:
+            messages.error(request, "No estabas inscrito en este taller.")
         return redirect("inicio_participante")
     inscritos = taller.inscripciones.count()
     capacidad = taller.cupo_maximo if taller.cupo_maximo else None
@@ -1343,7 +1352,9 @@ def part_concurso_inscribir_view(request, concurso_id: int):
     except Concurso.DoesNotExist:
         messages.error(request, "El concurso solicitado no existe en este congreso.")
         return redirect("part_concursos")
-    # Manejo de inscripción concurso
+    # Import necesario para uso en GET (agrupación de equipos y mapeo miembro->equipo)
+    from .models import ConcursoEquipoMiembro, ConcursoEquipo
+    # Manejo de inscripción / desinscripción concurso
     if request.method == "POST" and request.POST.get("action") == "enroll_concurso":
         if not ctx.get("approved"):
             messages.error(request, "Tu membresía aún no está aprobada. No puedes inscribirte.")
@@ -1472,6 +1483,30 @@ def part_concurso_inscribir_view(request, concurso_id: int):
             messages.success(request, f"Has registrado el equipo '{team_name}' en el concurso '{concurso.title}'.", extra_tags="concurso")
         else:
             messages.success(request, f"Te has inscrito al concurso '{concurso.title}'.", extra_tags="concurso")
+        return redirect("inicio_participante")
+    if request.method == "POST" and request.POST.get("action") == "unenroll_concurso":
+        # Eliminar inscripción del usuario y su membresía de equipo (si aplica)
+        ins_qs = ConcursoInscripcion.objects.filter(congreso=congreso, concurso=concurso, user=request.user)
+        removed = False
+        if ins_qs.exists():
+            ins_qs.delete()
+            removed = True
+        # Quitar del equipo grupal si está en alguno
+        if concurso.type == "grupal":
+            memb_qs = ConcursoEquipoMiembro.objects.filter(equipo__concurso=concurso, user=request.user)
+            equipos_afectados = list(memb_qs.values_list("equipo_id", flat=True))
+            if memb_qs.exists():
+                memb_qs.delete()
+                removed = True
+            # Eliminar equipos vacíos posteriores a la salida
+            if equipos_afectados:
+                vacios = ConcursoEquipo.objects.filter(id__in=equipos_afectados).annotate(cnt=Count("miembros")).filter(cnt=0)
+                if vacios.exists():
+                    vacios.delete()
+        if removed:
+            messages.error(request, f"Has sido borrado del concurso '{concurso.title}'.", extra_tags="concurso")
+        else:
+            messages.error(request, "No estabas inscrito en este concurso.")
         return redirect("inicio_participante")
     inscritos = concurso.inscripciones.count()
     if concurso.type == "individual":
@@ -1695,6 +1730,14 @@ def part_conferencia_inscribir_view(request, conferencia_id: int):
             performance_level=perf,
         )
         messages.success(request, f"Te has inscrito a la conferencia '{conferencia.title}'.", extra_tags="conferencia")
+        return redirect("inicio_participante")
+    if request.method == "POST" and request.POST.get("action") == "unenroll_conferencia":
+        ins_qs = ConferenciaInscripcion.objects.filter(congreso=congreso, conferencia=conferencia, user=request.user)
+        if ins_qs.exists():
+            ins_qs.delete()
+            messages.error(request, f"Has sido borrado de la conferencia '{conferencia.title}'.", extra_tags="conferencia")
+        else:
+            messages.error(request, "No estabas inscrito en esta conferencia.")
         return redirect("inicio_participante")
     inscritos = conferencia.inscripciones.count()
     capacidad = conferencia.cupo_maximo if conferencia.cupo_maximo else None
@@ -3630,7 +3673,7 @@ def congresos_eventos_view(request):
                             # Si falla, continuar igualmente con la eliminación del congreso
                             pass
                     cg.delete()
-                messages.success(request, "Congreso eliminado.")
+                messages.success(request, "Evento o Congreso eliminado.")
             return HttpResponseRedirect(reverse("congresos_eventos"))
 
     congresos = list(Congreso.objects.all().order_by("name"))
@@ -3897,7 +3940,7 @@ def congreso_evento_view(request):
                 except Exception:
                     pass
 
-            messages.success(request, "Congreso o evento creado correctamente.")
+            messages.success(request, "Evento o Congreso creado correctamente.")
             return redirect("congresos_eventos")
 
     return render(request, "congreso_evento.html", {"rol": rol, "is_scoped_admin": False})
@@ -4082,7 +4125,7 @@ def editar_congreso_evento_view(request, congreso_id: int):
             congreso.conferencias_por_participante = _parse_pos_int(raw_conferencias)
             congreso.concursos_por_participante = _parse_pos_int(raw_concursos)
             congreso.save()
-            messages.success(request, "Congreso o evento actualizado correctamente.")
+            messages.success(request, "Evento o Congreso actualizado correctamente.")
             return redirect("congresos_eventos")
 
     # Valores por defecto para el formulario

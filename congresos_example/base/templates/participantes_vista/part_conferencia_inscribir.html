@@ -131,6 +131,11 @@
           <div>
             {% if ya_inscrito %}
               <span class="btn btn-success disabled" aria-disabled="true">Ya inscrito en esta conferencia</span>
+              <form method="post" style="display:inline; margin-left:8px;">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="unenroll_conferencia" />
+                <button type="submit" class="btn btn-outline-danger">Desinscribirme</button>
+              </form>
             {% elif max_conferencias_por_participante and inscritos_count_conferencias|default:0 >= max_conferencias_por_participante %}
               <span class="btn btn-secondary disabled" aria-disabled="true">Alcanzaste el máximo de conferencias</span>
             {% elif not approved %}
@@ -162,7 +167,7 @@
             </div>
           </div>
           <div class="det-col">
-            <div class="det-label">Área</div>
+            <div class="det-label">Lugar y Horario</div>
             <div class="det-value">{% if conferencia.lugar %}{{ conferencia.lugar }}{% else %}—{% endif %}</div>
           </div>
           <div class="det-col">

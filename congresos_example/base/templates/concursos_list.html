@@ -32,7 +32,7 @@
       <div class="container-fluid px-0">
         <div class="d-flex align-items-start justify-content-between">
           <div class="d-flex align-items-center flex-grow-1">
-            <img src="{% static 'base/img/concurso.png' %}" alt="Concursos" style="width:140px;height:140px;object-fit:contain;border-radius:12px;background:#ffffff;margin-right:20px;">
+            <img src="{% static 'base/img/concurso.png' %}" alt="Concursos" style="width:140px;height:140px;object-fit:contain;border-radius:50%;background:#ffffff;margin-right:20px;">
             <h1 class="hero-title m-0" style="font-size:2.4rem;font-weight:800;">Concursos</h1>
           </div>
           <div class="d-grid gap-2" style="min-width:220px;">
@@ -69,7 +69,7 @@
                   {{ x.instructor|full_name }}
                 {% else %}—{% endif %}
               </div>
-              {% if x.lugar %}<div><strong>Lugar:</strong> {{ x.lugar }}</div>{% endif %}
+              {% if x.lugar %}<div><strong>Lugar y Horario:</strong> {{ x.lugar }}</div>{% endif %}
               {% if x.description %}
               <div class="desc-line">{{ x.description|first_line }}</div>
               {% endif %}
@@ -85,7 +85,19 @@
                   {{ x.inscripciones.count }} participantes de {{ x.cupo_maximo|default:'—' }}
                 </div>
               {% endif %}
-              <span class="status-badge">Disponible</span>
+              {% if x.type == 'individual' %}
+                {% if x.cupo_maximo and x.inscripciones.count >= x.cupo_maximo %}
+                  <span class="status-badge" style="background:#ef4444;">No Disponible</span>
+                {% else %}
+                  <span class="status-badge">Disponible</span>
+                {% endif %}
+              {% else %}
+                {% if x.numero_equipos and x.equipos.count >= x.numero_equipos %}
+                  <span class="status-badge" style="background:#ef4444;">No Disponible</span>
+                {% else %}
+                  <span class="status-badge">Disponible</span>
+                {% endif %}
+              {% endif %}
             </div>
             <div class="mt-3 d-flex gap-2 icon-actions">
               <a href="{% url 'concurso_editar' congreso.id x.id %}" class="btn btn-warning" title="Editar" aria-label="Editar"><i class="bi bi-pencil-square"></i></a>

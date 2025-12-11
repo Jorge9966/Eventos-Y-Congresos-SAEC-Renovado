@@ -33,7 +33,7 @@
       <div class="container-fluid px-0">
         <div class="d-flex align-items-start justify-content-between">
           <div class="d-flex align-items-center flex-grow-1">
-            <img src="{% static 'base/img/taller.png' %}" alt="Talleres" style="width:140px;height:140px;object-fit:contain;border-radius:12px;background:#ffffff;margin-right:20px;">
+            <img src="{% static 'base/img/taller.png' %}" alt="Talleres" style="width:140px;height:140px;object-fit:contain;border-radius:50%;background:#ffffff;margin-right:20px;">
             <h1 class="hero-title m-0" style="font-size:2.4rem;font-weight:800;">Talleres</h1>
           </div>
           <div class="d-grid gap-2" style="min-width:220px;">
@@ -69,7 +69,7 @@
                   {{ t.instructor|full_name }}
                 {% else %}—{% endif %}
               </div>
-              {% if t.lugar %}<div><strong>Lugar:</strong> {{ t.lugar }}</div>{% endif %}
+              {% if t.lugar %}<div><strong>Lugar y Horario:</strong> {{ t.lugar }}</div>{% endif %}
               {% if t.description %}
               <div class="desc-line">{{ t.description|first_line }}</div>
               {% endif %}
@@ -79,7 +79,11 @@
               <div class="stat"><i class="bi bi-people"></i>
                 {{ t.inscripciones.count }} participantes de {{ t.cupo_maximo|default:'—' }}
               </div>
-              <span class="status-badge">Disponible</span>
+              {% if t.cupo_maximo and t.inscripciones.count >= t.cupo_maximo %}
+                <span class="status-badge" style="background:#ef4444;">No Disponible</span>
+              {% else %}
+                <span class="status-badge">Disponible</span>
+              {% endif %}
             </div>
             <div class="mt-3 d-flex gap-2 icon-actions">
               <a href="{% url 'taller_editar' congreso.id t.id %}" class="btn btn-warning" title="Editar" aria-label="Editar"><i class="bi bi-pencil-square"></i></a>
