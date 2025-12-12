@@ -60,9 +60,13 @@ def _xlsx_border_thin():
     return Border(top=thin, bottom=thin, left=thin, right=thin)
 
 def _xlsx_add_resumen(ws, pairs: list[tuple[str, str]]):
+    # Remapear etiquetas solicitadas
+    remap = {
+        "Lugar": "Lugar y Horario",
+    }
     # Escribir filas
     for k, v in pairs:
-        ws.append([k, v])
+        ws.append([remap.get(k, k), v])
     # Anchos de columna
     if ws.column_dimensions.get('A'):
         ws.column_dimensions['A'].width = 18
@@ -98,7 +102,14 @@ def _xlsx_add_resumen(ws, pairs: list[tuple[str, str]]):
             pass
 
 def _xlsx_add_participantes(ws, headers: list[str], rows: list[list[str]]):
-    ws.append(headers)
+    # Remapear encabezados solicitados
+    mapped_headers = []
+    for h in headers:
+        if str(h).strip().lower() == "nivel de desempeño":
+            mapped_headers.append("Rol / Cargo / Semestre")
+        else:
+            mapped_headers.append(h)
+    ws.append(mapped_headers)
     # Ajustar anchos iniciales para primeras columnas
     widths = [6, 28, 30, 20]
     for idx, w in enumerate(widths, start=1):
@@ -122,7 +133,7 @@ def _xlsx_add_participantes(ws, headers: list[str], rows: list[list[str]]):
     if Font:
         for cell in ws[1]:
             cell.font = Font(bold=True)
-    for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=len(headers)):
+    for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=len(mapped_headers)):
         for cell in row:
             if Alignment:
                 cell.alignment = Alignment(wrap_text=True, vertical='top')
@@ -292,7 +303,7 @@ def _deny_non_admin_roles(request):
                 reverse("inicio_participante"),
             }
             # También permitir home público, login, registro y recuperación
-            allowed_names = {"home", "login", "register", "password_reset", "code_password"}
+            allowed_names = {"home", "login", "register", "password_reset", "code_password", "inicio_participante"}
             current_path = request.path
             current_name = None
             try:
@@ -823,8 +834,8 @@ def campos_view(request):
 # -------------------
 def logout_view(request):
     logout(request)
-    # Redirigir siempre a la página pública de inicio (lista de congresos)
-    return redirect("home")
+    # Redirigir siempre a la página pública de inicio (home.html: lista de congresos)
+    return redirect("home_congresos")
 
 
 # -------------------
@@ -1261,7 +1272,7 @@ def part_taller_inscribir_view(request, taller_id: int):
         ins_qs = TallerInscripcion.objects.filter(congreso=congreso, taller=taller, user=request.user)
         if ins_qs.exists():
             ins_qs.delete()
-            messages.error(request, f"Has sido borrado del taller '{taller.title}'.", extra_tags="taller")
+            messages.error(request, f"Has sido dado de baja del taller '{taller.title}'.", extra_tags="taller")
         else:
             messages.error(request, "No estabas inscrito en este taller.")
         return redirect("inicio_participante")
@@ -1504,7 +1515,7 @@ def part_concurso_inscribir_view(request, concurso_id: int):
                 if vacios.exists():
                     vacios.delete()
         if removed:
-            messages.error(request, f"Has sido borrado del concurso '{concurso.title}'.", extra_tags="concurso")
+            messages.error(request, f"Has sido dado de baja del concurso '{concurso.title}'.", extra_tags="concurso")
         else:
             messages.error(request, "No estabas inscrito en este concurso.")
         return redirect("inicio_participante")
@@ -1735,7 +1746,7 @@ def part_conferencia_inscribir_view(request, conferencia_id: int):
         ins_qs = ConferenciaInscripcion.objects.filter(congreso=congreso, conferencia=conferencia, user=request.user)
         if ins_qs.exists():
             ins_qs.delete()
-            messages.error(request, f"Has sido borrado de la conferencia '{conferencia.title}'.", extra_tags="conferencia")
+            messages.error(request, f"Has sido dado de baja de la conferencia '{conferencia.title}'.", extra_tags="conferencia")
         else:
             messages.error(request, "No estabas inscrito en esta conferencia.")
         return redirect("inicio_participante")
@@ -5931,16 +5942,12 @@ def export_instructores_excel_view(request, congreso_id: int):
 
     headers = [
         _normalize("#"),
-        _normalize("ID Usuario"),
         _normalize("Nombre"),
         _normalize("Correo"),
         _normalize("Status"),
     ] + [_normalize(f.name) for f in extra_fields] + [
-        _normalize("Talleres IDs"),
         _normalize("Talleres"),
-        _normalize("Conferencias IDs"),
         _normalize("Conferencias"),
-        _normalize("Concursos IDs"),
         _normalize("Concursos"),
     ]
 
@@ -5968,18 +5975,15 @@ def export_instructores_excel_view(request, congreso_id: int):
             conf_titles = "; ".join(_normalize(c[1]) for c in conf)
             conc_ids = "; ".join(str(cu[0]) for cu in conc)
             conc_titles = "; ".join(_normalize(cu[1]) for cu in conc)
+            nombre_completo = (u.get_full_name() or f"{u.first_name} {u.last_name}" or u.username or u.email).strip()
             ws.append([
                 idx,
-                u.id,
-                _normalize(u.first_name or u.username or u.email),
+                _normalize(nombre_completo),
                 _normalize(u.email or u.username),
                 _normalize(m.status),
                 *[ _normalize(v) for v in ordered_values ],
-                tall_ids,
                 tall_titles,
-                conf_ids,
                 conf_titles,
-                conc_ids,
                 conc_titles,
             ])
         # Auto ancho + compactar texto y bordes
@@ -6038,18 +6042,15 @@ def export_instructores_excel_view(request, congreso_id: int):
             conf_titles = "; ".join(_normalize(c[1]) for c in conf)
             conc_ids = "; ".join(str(cu[0]) for cu in conc)
             conc_titles = "; ".join(_normalize(cu[1]) for cu in conc)
+            nombre_completo = (u.get_full_name() or f"{u.first_name} {u.last_name}" or u.username or u.email).strip()
             writer.writerow([
                 idx,
-                u.id,
-                _normalize(u.first_name or u.username or u.email),
+                _normalize(nombre_completo),
                 _normalize(u.email or u.username),
                 _normalize(m.status),
                 *[ _normalize(v) for v in ordered_values ],
-                tall_ids,
                 tall_titles,
-                conf_ids,
                 conf_titles,
-                conc_ids,
                 conc_titles,
             ])
         response = HttpResponse(buffer.getvalue(), content_type="text/csv")
@@ -6125,9 +6126,21 @@ def export_participantes_excel_view(request, congreso_id: int):
     equipos_miembros = ConcursoEquipoMiembro.objects.filter(
         equipo__concurso__congreso=congreso, user_id__in=user_ids
     ).select_related("equipo", "equipo__concurso")
-    equipos_map: dict[int, list[str]] = {}
+    # Mapa detallado: por usuario, lista de "Equipo (Concurso): Integrantes: A, B, C" (excluye al usuario)
+    equipos_detalle_map: dict[int, list[str]] = {}
     for em in equipos_miembros:
-        equipos_map.setdefault(em.user_id, []).append(f"{em.equipo.nombre} ({em.equipo.concurso.title})")
+        try:
+            miembros = list(em.equipo.miembros.select_related("user"))
+        except Exception:
+            miembros = []
+        integrantes_nombres: list[str] = []
+        for m in miembros:
+            if m.user_id == em.user_id:
+                continue
+            nombre_m = m.user.get_full_name() or f"{m.user.first_name} {m.user.last_name}" or m.user.username or m.user.email
+            integrantes_nombres.append(nombre_m.strip())
+        detalle = f"{em.equipo.nombre} ({em.equipo.concurso.title}): " + (", ".join(integrantes_nombres) if integrantes_nombres else "(sin otros integrantes)")
+        equipos_detalle_map.setdefault(em.user_id, []).append(detalle)
 
     import unicodedata
     def _normalize(text: str | None) -> str:
@@ -6137,19 +6150,15 @@ def export_participantes_excel_view(request, congreso_id: int):
 
     headers = [
         _normalize("#"),
-        _normalize("ID Usuario"),
         _normalize("Nombre"),
         _normalize("Correo"),
         _normalize("Status"),
-        _normalize("Nivel de desempeno"),
+        _normalize("Rol / Cargo / Semestre"),
     ] + [_normalize(f.name) for f in extra_fields] + [
-        _normalize("Talleres IDs"),
         _normalize("Talleres"),
-        _normalize("Conferencias IDs"),
         _normalize("Conferencias"),
-        _normalize("Concursos IDs"),
-        _normalize("Concursos"),
-        _normalize("Equipos concursos grupales"),
+        _normalize("Concursos individuales"),
+        _normalize("Concursos grupales (equipo)"),
     ]
 
     try:
@@ -6170,22 +6179,32 @@ def export_participantes_excel_view(request, congreso_id: int):
             tall = tall_map.get(u.id, [])
             conf = conf_map.get(u.id, [])
             conc = conc_map.get(u.id, [])
-            equipos = equipos_map.get(u.id, [])
+            equipos_detalle = equipos_detalle_map.get(u.id, [])
+            nombre_completo = (u.get_full_name() or f"{u.first_name} {u.last_name}" or u.username or u.email).strip()
+            # Separar concursos individuales vs grupales
+            # Concursos individuales: usuario inscrito en concurso tipo individual
+            conc_ind_titles = []
+            conc_grp_titles = []
+            for (cid, ctitle) in conc:
+                try:
+                    cobj = Concurso.objects.get(pk=cid, congreso=congreso)
+                    if cobj.type == "grupal":
+                        conc_grp_titles.append(ctitle)
+                    else:
+                        conc_ind_titles.append(ctitle)
+                except Concurso.DoesNotExist:
+                    conc_ind_titles.append(ctitle)
             ws.append([
                 idx,
-                u.id,
-                _normalize(u.first_name or u.username or u.email),
+                _normalize(nombre_completo),
                 _normalize(u.email or u.username),
                 _normalize(m.status),
                 _normalize(m.performance_level.name if m.performance_level else ""),
                 *[ _normalize(v) for v in ordered_values ],
-                "; ".join(str(t[0]) for t in tall),
                 "; ".join(_normalize(t[1]) for t in tall),
-                "; ".join(str(c[0]) for c in conf),
                 "; ".join(_normalize(c[1]) for c in conf),
-                "; ".join(str(cu[0]) for cu in conc),
-                "; ".join(_normalize(cu[1]) for cu in conc),
-                "; ".join(_normalize(e) for e in equipos),
+                "; ".join(_normalize(t) for t in conc_ind_titles),
+                "; ".join(_normalize(e) for e in (equipos_detalle if equipos_detalle else conc_grp_titles)),
             ])
         # Compactar texto y aplicar bordes
         thin = Side(style="thin", color="000000")
@@ -6237,22 +6256,30 @@ def export_participantes_excel_view(request, congreso_id: int):
             tall = tall_map.get(u.id, [])
             conf = conf_map.get(u.id, [])
             conc = conc_map.get(u.id, [])
-            equipos = equipos_map.get(u.id, [])
+            equipos_detalle = equipos_detalle_map.get(u.id, [])
+            nombre_completo = (u.get_full_name() or f"{u.first_name} {u.last_name}" or u.username or u.email).strip()
+            conc_ind_titles = []
+            conc_grp_titles = []
+            for (cid, ctitle) in conc:
+                try:
+                    cobj = Concurso.objects.get(pk=cid, congreso=congreso)
+                    if cobj.type == "grupal":
+                        conc_grp_titles.append(ctitle)
+                    else:
+                        conc_ind_titles.append(ctitle)
+                except Concurso.DoesNotExist:
+                    conc_ind_titles.append(ctitle)
             writer.writerow([
                 idx,
-                u.id,
-                _normalize(u.first_name or u.username or u.email),
+                _normalize(nombre_completo),
                 _normalize(u.email or u.username),
                 _normalize(m.status),
                 _normalize(m.performance_level.name if m.performance_level else ""),
                 *[ _normalize(v) for v in ordered_values ],
-                "; ".join(str(t[0]) for t in tall),
                 "; ".join(_normalize(t[1]) for t in tall),
-                "; ".join(str(c[0]) for c in conf),
                 "; ".join(_normalize(c[1]) for c in conf),
-                "; ".join(str(cu[0]) for cu in conc),
-                "; ".join(_normalize(cu[1]) for cu in conc),
-                "; ".join(_normalize(e) for e in equipos),
+                "; ".join(_normalize(t) for t in conc_ind_titles),
+                "; ".join(_normalize(e) for e in (equipos_detalle if equipos_detalle else conc_grp_titles)),
             ])
         response = HttpResponse(buffer.getvalue(), content_type="text/csv")
         response["Content-Disposition"] = "attachment; filename=Participantes.csv"
@@ -7731,6 +7758,24 @@ def export_concurso_excel_view(request, congreso_id: int, concurso_id: int):
         headers = base_headers + [f.name for f in extra_fields]
         rows = []
 
+        # Helper: obtener nombre de nivel de desempeño por usuario,
+        # con fallback a la membresía del congreso si la inscripción no lo trae.
+        def _nivel_para_usuario(inscripcion):
+            if inscripcion.performance_level:
+                return inscripcion.performance_level.name
+            try:
+                memb = (
+                    UserCongresoMembership.objects
+                    .select_related("performance_level")
+                    .filter(congreso=congreso, user_id=inscripcion.user_id, status="APPROVED")
+                    .first()
+                )
+                if memb and getattr(memb, "performance_level", None):
+                    return memb.performance_level.name
+            except Exception:
+                pass
+            return "—"
+
         if concurso.type == "grupal":
             # Construir filas agrupadas por equipo y enumeradas por equipo
             ins_by_user = {i.user_id: i for i in inscripciones}
@@ -7752,7 +7797,7 @@ def export_concurso_excel_view(request, congreso_id: int, concurso_id: int):
                     u = ins.user
                     nombre = (u.get_full_name() or u.username)
                     correo = (u.email or "—")
-                    nivel = (ins.performance_level.name if ins.performance_level else "—")
+                    nivel = _nivel_para_usuario(ins)
                     extras = [extra_map.get(u.id, {}).get(f.id, "—") for f in extra_fields]
                     rows.append([str(idx), nombre, correo, nivel, eq.nombre, *extras])
             # Huérfanos (sin equipo), al final, enumeración propia
@@ -7762,7 +7807,7 @@ def export_concurso_excel_view(request, congreso_id: int, concurso_id: int):
                 u = ins.user
                 nombre = (u.get_full_name() or u.username)
                 correo = (u.email or "—")
-                nivel = (ins.performance_level.name if ins.performance_level else "—")
+                nivel = _nivel_para_usuario(ins)
                 extras = [extra_map.get(u.id, {}).get(f.id, "—") for f in extra_fields]
                 rows.append([str(idx), nombre, correo, nivel, "Sin equipo", *extras])
         else:
@@ -7773,7 +7818,7 @@ def export_concurso_excel_view(request, congreso_id: int, concurso_id: int):
                 u = ins.user
                 nombre = (u.get_full_name() or u.username)
                 correo = (u.email or "—")
-                nivel = (ins.performance_level.name if ins.performance_level else "—")
+                nivel = _nivel_para_usuario(ins)
                 extras = [extra_map.get(u.id, {}).get(f.id, "—") for f in extra_fields]
                 rows.append([str(idx), nombre, correo, nivel, *extras])
 

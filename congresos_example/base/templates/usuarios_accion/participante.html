@@ -54,12 +54,29 @@
           </div>
           <div class="col-md-6">
             <label class="form-label">Contraseña</label>
-            <input class="form-control" type="password" name="password" minlength="8" maxlength="16" placeholder="Contraseña" />
+            <div class="input-group">
+              <input id="part_user_password" class="form-control" type="password" name="password" minlength="8" maxlength="16" placeholder="Contraseña" />
+              <button class="btn btn-primary" type="button" onclick="togglePassword('part_user_password', this)" aria-label="Mostrar/Ocultar contraseña"><i class="bi bi-eye-slash"></i></button>
+            </div>
             <div class="form-hint">8-16 caracteres, con mayúscula, minúscula y símbolo especial (.!%&$}).</div>
           </div>
           <div class="col-md-6">
             <label class="form-label">Contraseña de acceso del congreso</label>
-            <input class="form-control" type="password" name="congreso_password" placeholder="Contraseña del congreso" />
+            <div class="input-group">
+              <input id="part_congreso_password" class="form-control" type="password" name="congreso_password" placeholder="Contraseña del congreso" />
+              <button class="btn btn-primary" type="button" onclick="togglePassword('part_congreso_password', this)" aria-label="Mostrar/Ocultar contraseña del congreso"><i class="bi bi-eye-slash"></i></button>
+            </div>
+          
+          <script>
+            function togglePassword(id, btn){
+              var input = document.getElementById(id);
+              if(!input) return;
+              var icon = btn && btn.querySelector('i');
+              var isPwd = input.type === 'password';
+              input.type = isPwd ? 'text' : 'password';
+              if(icon){ icon.classList.toggle('bi-eye-slash', !isPwd); icon.classList.toggle('bi-eye', isPwd); }
+            }
+          </script>
           </div>
           <div class="col-md-6">
             <label class="form-label">Rol / Cargo / Semestre</label>

@@ -20,6 +20,7 @@
     .work-divider{ height:1px; background:#eef2f7; margin:12px 0; }
     .stat{ color:#64748b; font-size:.9rem; display:flex; align-items:center; gap:6px; }
     .status-badge{ background:#22c55e; color:#fff; border-radius:24px; padding:4px 12px; font-weight:600; font-size:.85rem; }
+    .icon-actions .btn{ display:inline-flex; align-items:center; justify-content:center; width:44px; height:40px; padding:0; }
   </style>
 </head>
 <body>
@@ -28,7 +29,10 @@
     {% include 'partials/instructor_topbar.html' %}
     <section class="hero-banner" style="margin-left:-40px; margin-right:-40px; width:calc(100% + 80px);">
       <div class="container-fluid px-0">
-        <h1 class="hero-title" style="font-size:2rem;">Participantes</h1>
+        <div class="d-flex align-items-center gap-3">
+          <img src="{% static 'base/img/participante_admin.png' %}" alt="Participantes" style="width:80px;height:80px;object-fit:contain;border-radius:50%;background:#ffffff;">
+          <h1 class="page-title m-0" style="font-size:2.2rem;">Participantes</h1>
+        </div>
         <p class="text-white" style="max-width:620px; font-size:1rem; opacity:.92;">Selecciona una opción para ver la lista de los alumnos inscritos</p>
       </div>
     </section>
@@ -66,10 +70,24 @@
                     {{ r.inscritos }} inscritos
                   {% endif %}
                 </div>
-                <span class="status-badge">Disponible</span>
+                {% if r.tipo == 'concurso' and r.obj.type == 'grupal' %}
+                  {% if r.obj.numero_equipos and r.equipos_inscritos >= r.obj.numero_equipos %}
+                    <span class="status-badge" style="background:#ef4444;">No Disponible</span>
+                  {% else %}
+                    <span class="status-badge">Disponible</span>
+                  {% endif %}
+                {% else %}
+                  {% if r.obj.cupo_maximo and r.inscritos >= r.obj.cupo_maximo %}
+                    <span class="status-badge" style="background:#ef4444;">No Disponible</span>
+                  {% else %}
+                    <span class="status-badge">Disponible</span>
+                  {% endif %}
+                {% endif %}
               </div>
-              <div class="mt-3 d-flex">
-                <a href="{{ r.url }}" class="btn btn-outline-dark w-100" style="border-radius:8px; font-weight:500;">Seleccionar</a>
+              <div class="mt-3 d-flex gap-2 icon-actions">
+                <a href="{{ r.url }}" class="btn btn-primary" title="Ver participantes" aria-label="Ver participantes">
+                  <i class="bi bi-people"></i>
+                </a>
               </div>
             </div>
           {% endfor %}

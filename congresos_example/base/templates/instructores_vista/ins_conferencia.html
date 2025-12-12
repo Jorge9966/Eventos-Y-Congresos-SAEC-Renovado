@@ -67,7 +67,10 @@
     <section class="hero-banner">
       <div class="hero-row">
         <div class="hero-left">
-          <h1 class="page-title">Mi Conferencia</h1>
+          <div class="d-flex align-items-center gap-3">
+            <img src="{% static 'base/img/conferencia.png' %}" alt="Conferencias" style="width:110px;height:110px;object-fit:contain;border-radius:50%;background:#ffffff;">
+            <h1 class="page-title m-0" style="font-size:2.5rem;">Conferencias</h1>
+          </div>
           <div class="hero-sub"><i class="bi bi-eye"></i> Vista previa</div>
         </div>
         <div class="hero-right">
@@ -111,7 +114,7 @@
                 {% if conferencia_inscritos < conferencia_capacidad %}
                   <span class="status-badge" style="background:#22c55e; color:#fff;">Disponible</span>
                 {% else %}
-                  <span class="status-badge" style="background:#ef4444; color:#fff;">Agotado</span>
+                  <span class="status-badge" style="background:#ef4444; color:#fff;">No Disponible</span>
                 {% endif %}
               {% else %}
                 <span class="status-badge" style="background:#22c55e; color:#fff;">Disponible</span>

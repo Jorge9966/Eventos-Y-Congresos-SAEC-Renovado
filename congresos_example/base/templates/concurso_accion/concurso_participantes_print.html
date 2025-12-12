@@ -58,7 +58,7 @@
           <select id="orderByTeam{{ forloop.counter }}" class="form-select" style="max-width:280px;">
             <option value="nombre" selected>Nombre</option>
             <option value="apellidos">Apellidos</option>
-            <option value="nivel">Nivel de desempeño</option>
+            <option value="nivel">Rol / Cargo / Semestre</option>
             <option value="correo">Correo</option>
             <option value="numero"># Enumeración</option>
             {% for ef in extra_fields %}
@@ -74,7 +74,7 @@
                 <th style="width:60px">#</th>
                 <th>Nombre</th>
                 <th>Correo</th>
-                <th>Nivel de desempeño</th>
+                <th>Rol / Cargo / Semestre</th>
                 {% for ef in extra_fields %}
                   <th>{{ ef.name }}</th>
                 {% endfor %}
@@ -159,7 +159,7 @@
         <select id="orderByOrphans" class="form-select" style="max-width:280px;">
           <option value="nombre" selected>Nombre</option>
           <option value="apellidos">Apellidos</option>
-          <option value="nivel">Nivel de desempeño</option>
+          <option value="nivel">Rol / Cargo / Semestre</option>
           <option value="correo">Correo</option>
           <option value="numero"># Enumeración</option>
           {% for ef in extra_fields %}
@@ -176,7 +176,7 @@
               <th style="width:60px">#</th>
               <th>Nombre</th>
               <th>Correo</th>
-              <th>Nivel de desempeño</th>
+              <th>Rol / Cargo / Semestre</th>
               {% for ef in extra_fields %}
                 <th>{{ ef.name }}</th>
               {% endfor %}
@@ -258,7 +258,7 @@
       <select id="orderBy" class="form-select" style="max-width:280px;">
         <option value="nombre" selected>Nombre</option>
         <option value="apellidos">Apellidos</option>
-        <option value="nivel">Nivel de desempeño</option>
+        <option value="nivel">Rol / Cargo / Semestre</option>
         <option value="correo">Correo</option>
         <option value="numero"># Enumeración</option>
         {% for ef in extra_fields %}
@@ -279,7 +279,7 @@
             <th style="width:60px">#</th>
             <th>Nombre</th>
             <th>Correo</th>
-            <th>Nivel de desempeño</th>
+            <th>Rol / Cargo / Semestre</th>
             {% for ef in extra_fields %}
               <th>{{ ef.name }}</th>
             {% endfor %}

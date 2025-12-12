@@ -8,7 +8,7 @@
       </a>
     </div>
   {% endif %}
-  <a {% if approved %}href="{% url 'inicio_participante' %}"{% else %}class="disabled-nav" aria-disabled="true" tabindex="-1"{% endif %}{% if curr == 'inicio_participante' %} aria-current="page"{% endif %}>Inicio</a>
+  <a href="{% url 'inicio_participante' %}"{% if curr == 'inicio_participante' %} aria-current="page"{% endif %}>Inicio</a>
   {% if congreso %}
     <a {% if approved %}href="{{ talleres_url }}"{% else %}class="disabled-nav" aria-disabled="true" tabindex="-1"{% endif %}{% if curr in 'part_talleres,part_taller_inscribir' %} aria-current="page"{% endif %}>Talleres</a>
     <a {% if approved %}href="{{ concursos_url }}"{% else %}class="disabled-nav" aria-disabled="true" tabindex="-1"{% endif %}{% if curr in 'part_concursos,part_concurso_inscribir' %} aria-current="page"{% endif %}>Concursos</a>
